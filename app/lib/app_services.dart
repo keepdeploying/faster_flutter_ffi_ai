@@ -17,10 +17,7 @@ typedef MicrosClock = int Function();
 
 /// Builds a classifier that runs [kind] at [site]. Null when the build can only
 /// run one site, in which case the screens use [AppServices.classifiers].
-typedef ClassifierAt = Classifier Function(
-  BridgeKind kind,
-  ExecutionSite site,
-);
+typedef ClassifierAt = Classifier Function(BridgeKind kind, ExecutionSite site);
 
 /// One row of the benchmark results table.
 class BenchRow {

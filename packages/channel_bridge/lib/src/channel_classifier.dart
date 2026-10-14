@@ -104,6 +104,12 @@ class ChannelClassifier {
     _loaded = true;
   }
 
+  /// Marks this classifier ready without loading again. The native side keeps
+  /// one model per Flutter engine, so a classifier in a background isolate
+  /// (via `BackgroundIsolateBinaryMessenger`) can use the model the main
+  /// isolate already loaded.
+  void markLoaded() => _loaded = true;
+
   /// Classifies one tightly packed RGBA8888 frame.
   Future<ChannelClassification> classify(
     Uint8List rgba,
