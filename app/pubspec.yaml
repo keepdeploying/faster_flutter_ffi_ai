@@ -1,0 +1,62 @@
+name: faster_flutter
+description: "Faster Flutter: on-device AI with Dart FFI."
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The three bridges. The app reaches them only through the interfaces in
+  # lib/bridges/bridge.dart, via small adapters in lib/bridges/.
+  ffi_bridge:
+    path: ../packages/ffi_bridge
+  channel_bridge:
+    path: ../packages/channel_bridge
+  llm_bridge:
+    path: ../packages/llm_bridge
+
+  # LiteRT through dart:ffi: the FFI side of the classifier. Pinned to the
+  # release whose Android runtime matches channel_bridge (LiteRT 1.4.2).
+  flutter_litert: 3.9.4
+
+  # Where results are saved and where the LLM model file is looked up.
+  path_provider: ^2.1.6
+  # Share sheet for a saved results file on the benchmark screen.
+  share_plus: ^13.3.1
+  # The phone model, written into every results file.
+  device_info_plus: ^13.3.0
+  # Material Symbols Rounded, one icon per bridge kind (font bundled).
+  material_symbols_icons: ^4.2960.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # The full benchmark on a phone: flutter drive --profile.
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  # Generates the Android and iOS app icons after `flutter create .`
+  # (scripts/setup.sh). Config: flutter_launcher_icons.yaml.
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/models/
+    - assets/frames/
+    - assets/icon/
+
+  # Both fonts are OFL and bundled, so the app works with no internet.
+  # See assets/fonts/README.txt.
+  fonts:
+    - family: GoogleSansFlex
+      fonts:
+        - asset: assets/fonts/GoogleSansFlex.ttf
+    - family: GoogleSansCode
+      fonts:
+        - asset: assets/fonts/GoogleSansCode.ttf

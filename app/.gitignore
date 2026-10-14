@@ -1,0 +1,53 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+.widget_preview/
+
+# Symbolication and obfuscation related
+app.*.symbols
+app.*.map.json
+
+# All target platforms, so the repository holds only the Dart code.
+# `flutter create .` generates them again in seconds, with no download
+# (see ../README.md). Because they are ignored, they survive every
+# `git checkout step-NN`, so attendees generate them once.
+android/
+ios/
+web/
+windows/
+linux/
+macos/
+.metadata
+
+# Ignored, like the platform folders, because `flutter create .` rewrites it
+# (Flutter 3.47.6 changed two package versions in it). A committed lockfile
+# would leave every attendee with a changed file, and `git checkout step-NN`
+# refuses to run over local changes.
+pubspec.lock

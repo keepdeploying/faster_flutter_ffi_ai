@@ -1,0 +1,18 @@
+# Run with `dart run ffigen --config ffigen.yaml`.
+# The leaf variant of ffb_checksum lives in lib/ffi_bridge_leaf_bindings.dart,
+# by hand, so regenerating this file never removes it.
+name: FfiBridgeBindings
+description: |
+  Bindings for `src/ffi_bridge.h`.
+
+  Regenerate bindings with `dart run ffigen --config ffigen.yaml`.
+output: 'lib/ffi_bridge_bindings_generated.dart'
+headers:
+  entry-points:
+    - 'src/ffi_bridge.h'
+  include-directives:
+    - 'src/ffi_bridge.h'
+ffi-native:
+comments:
+  style: any
+  length: full

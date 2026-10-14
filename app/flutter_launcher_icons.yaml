@@ -1,0 +1,10 @@
+# Run by scripts/setup.sh after `flutter create`:
+#   dart run flutter_launcher_icons -f flutter_launcher_icons.yaml
+# The mark is assets/icon/icon.svg, rendered to the PNGs below at 1024 px.
+flutter_launcher_icons:
+  image_path: assets/icon/icon.png
+  android: true
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: assets/icon/icon_foreground.png
+  ios: true
+  remove_alpha_ios: true
