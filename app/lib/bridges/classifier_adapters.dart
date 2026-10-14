@@ -7,6 +7,7 @@
 // only difference is how the call gets there.
 
 import 'dart:async';
+import 'dart:developer' show Timeline;
 import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -123,7 +124,14 @@ class LiteRtFfiClassifier implements Classifier {
   @override
   Future<Classification> classify(Frame frame) async {
     final watch = Stopwatch()..start();
-    final r = _model.run(frame);
+    // Named so it shows under Timeline events in DevTools.
+    Timeline.startSync('classify: ffi');
+    final _Reply r;
+    try {
+      r = _model.run(frame);
+    } finally {
+      Timeline.finishSync();
+    }
     watch.stop();
     return _toClassification(r.withTotal(watch.elapsedMicroseconds), _labels);
   }
@@ -355,7 +363,14 @@ void _ffiWorker(List<Object?> args) {
         width: m[1]! as int,
         height: m[2]! as int,
       );
-      out.send(model.run(frame).toMessage());
+      Timeline.startSync('classify: ffi (isolate)');
+      final _Reply r;
+      try {
+        r = model.run(frame);
+      } finally {
+        Timeline.finishSync();
+      }
+      out.send(r.toMessage());
     } on Object catch (e) {
       out.send('$e');
     }
