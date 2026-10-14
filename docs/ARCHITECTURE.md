@@ -20,7 +20,7 @@ faster_flutter_ffi/
     lib/bench/              runner, stats, frame-time meter, results JSON
     lib/screens/            home, bridge race, classify, generate, benchmark
     lib/theme/              tokens, theme, fonts, icons
-    assets/models/          mobilenet .tflite + labels (small, committed)
+    assets/models/          float MobileNet V1 1.0/224 .tflite + labels (17 MB, committed)
     assets/frames/          fixed test frames (committed, so runs repeat)
     assets/fonts/, assets/icon/
     integration_test/       the full benchmark, `flutter drive --profile`
@@ -28,8 +28,11 @@ faster_flutter_ffi/
   packages/
     ffi_bridge/             package_ffi: C sources, hook/build.dart, ffigen bindings
     channel_bridge/         Flutter plugin: Kotlin (Android) and Swift (iOS) handlers
-  tool/                     report.dart: results JSON -> Markdown tables + SVG charts
-  scripts/                  setup.sh, fetch-models.sh, bench-android.sh, bench-ios.sh
+    llm_bridge/             llama.cpp over FFI: build hook, C wrapper, token stream
+  tool/                     faster_flutter_tool: bin/report.dart turns a results JSON
+                            into Markdown tables + SVG charts (own tests, plain Dart)
+  scripts/                  setup.sh, fetch-models.sh, bench-android.sh, bench-ios.sh,
+                            report-latest.sh, check-all.sh, lib.sh (shared helpers)
   results/                  curated runs: <yyyy-mm-dd>_<device>.json (+ generated report)
 ```
 
@@ -47,10 +50,10 @@ without updating every implementation and test in the same change.
 | `PayloadBridge` | methodChannel, binaryChannel | `channel_bridge` (Dart side + Kotlin + Swift) |
 | `PayloadBridge` | ffiCopy, ffiLeaf, ffiZeroCopy | `ffi_bridge` |
 | `Preprocessor` | Dart, C (via FFI) | app (Dart), `ffi_bridge` (C) |
-| `Classifier` | channel (Kotlin/Swift runs LiteRT) | `channel_bridge` |
-| `Classifier` | FFI (`flutter_litert`) | app/lib/bridges or `ffi_bridge` |
+| `Classifier` | channel (Kotlin runs LiteRT 1.4.2 on Android) | `channel_bridge` |
+| `Classifier` | FFI (`flutter_litert` 3.9.4, LiteRT 1.4.2 on Android) | app/lib/bridges or `ffi_bridge` |
 | `TokenGenerator` | C demo generator on a pthread + `NativeCallable.listener` | `ffi_bridge` |
-| `TokenGenerator` | real LLM through llama.cpp over FFI | its own package or a vetted pub package |
+| `TokenGenerator` | real LLM: Qwen2.5-0.5B-Instruct Q4_K_M through llama.cpp over FFI | `llm_bridge` (`LlamaTokenGenerator`, app adapter in `app/lib/bridges/`) |
 
 Packages must not import the app. Each package exposes a small public API
 (classes named `ChannelPayloadBridge`, `FfiPayloadBridge(kind)`,
@@ -58,13 +61,24 @@ Packages must not import the app. Each package exposes a small public API
 implements interfaces it receives as plain Dart types, or the app wraps them in a
 thin adapter in `app/lib/bridges/`. Prefer the adapter: packages stay independent.
 
+`ffi_bridge` is built by a build hook (`hook/build.dart`) that uses
+`native_toolchain_c` ^0.19.5 and `code_assets` ^2.1.0: no CMake, podspec or
+Gradle file. `llm_bridge` has its own hook that runs CMake on a pinned llama.cpp
+commit (docs/LLM.md).
+
+**One preprocessing rule.** Every preprocessor (Kotlin, Dart, C) does the same
+thing, so the only thing that differs between runs is the bridge: a half-pixel
+bilinear resize from the RGBA frame to 224 x 224, with
+`src = (dst + 0.5) * scale - 0.5` on each axis, clamped to the frame; alpha
+dropped; RGB floats in [-1, 1] (`pixel / 127.5 - 1`).
+
 ### Native side, C (`ffi_bridge/src/ffi_bridge.h`)
 
 ```c
 uint32_t ffb_checksum(const uint8_t* data, size_t len);          // leaf-safe
 uint8_t* ffb_alloc(size_t len);  void ffb_free(uint8_t* p);
 void ffb_preprocess_rgba(const uint8_t* rgba, int32_t w, int32_t h,
-                         float* out, int32_t size);              // bilinear, [-1, 1]
+                         float* out, int32_t size);              // half-pixel bilinear, clamped, [-1, 1]
 // Demo token stream: starts a pthread that calls `on_token` once per token,
 // sleeping `delay_ms` between tokens, then calls it with NULL to signal the end.
 int64_t ffb_demo_generate(const char* prompt, int32_t max_tokens, int32_t delay_ms,
@@ -78,7 +92,8 @@ Swift. Every round trip asserts it.
 ### Channel names
 
 - `faster_flutter/method` (MethodChannel, StandardMessageCodec): methods
-  `roundTrip(Uint8List) -> int`, `loadModel(String assetKey)`,
+  `roundTrip(Uint8List) -> int`, `loadModel({model, labels, threads}) -> null`
+  (`model` and `labels` are asset keys, `threads` is the LiteRT thread count),
   `classify({rgba, width, height}) -> {index, label, confidence, preprocessUs, inferenceUs}`.
 - `faster_flutter/binary` (BasicMessageChannel, BinaryCodec): payload in, 4-byte
   little-endian checksum out. Android uses `BinaryCodec.INSTANCE_DIRECT`.
@@ -86,13 +101,25 @@ Swift. Every round trip asserts it.
 Native timings use the monotonic clock on each side (`System.nanoTime`,
 `DispatchTime`), measured inside the handler.
 
+## Models
+
+- **Classifier:** MobileNet V1, width 1.0, 224 x 224, float32 (not quantized),
+  Apache-2.0. One file for every classifier in the demo. Source, checksums and
+  labels: `app/assets/models/README.md`. On Android both paths run it on
+  LiteRT 1.4.2: the Kotlin handler in `channel_bridge`
+  (`com.google.ai.edge.litert:litert:1.4.2`) and `flutter_litert` 3.9.4 over FFI.
+- **LLM:** Qwen2.5-0.5B-Instruct, Q4_K_M, Apache-2.0, through
+  `packages/llm_bridge` (llama.cpp tag b11610, CPU only). Never committed:
+  `scripts/fetch-models.sh` downloads it and checks its SHA-256. Why this model,
+  and how it gets onto each phone: docs/LLM.md.
+
 ## Results file (schema 1)
 
 ```json
 {
   "schema": 1,
   "createdAt": "2026-10-14T10:00:00Z",
-  "device": {"platform": "android", "model": "Pixel 8", "os": "16", "abi": "arm64-v8a"},
+  "device": {"platform": "android", "model": "Pixel 8", "os": "16", "abi": "android_arm64"},
   "flutter": "3.47.6",
   "buildMode": "profile",
   "suites": [
@@ -101,7 +128,7 @@ Native timings use the monotonic clock on each side (`System.nanoTime`,
      "stats": {"p50Us": 0.4, "p95Us": 0.6, "p99Us": 1.1, "meanUs": 0.5, "minUs": 0.3, "maxUs": 12.0}},
     {"suite": "preprocess", "impl": "c", "runs": 500, "stats": {}},
     {"suite": "classify", "bridge": "ffiCopy", "site": "isolate", "runs": 300,
-     "total": {}, "preprocess": {}, "inference": {}, "bridge": {}},
+     "total": {}, "preprocess": {}, "inference": {}, "overhead": {}},
     {"suite": "jank", "bridge": "methodChannel", "site": "uiThread", "seconds": 30,
      "frames": 1800, "jankyFrames": 42, "worstFrameMs": 61.2, "budgetMs": 16.7},
     {"suite": "generate", "generator": "demo", "tokens": 128,
@@ -109,6 +136,13 @@ Native timings use the monotonic clock on each side (`System.nanoTime`,
   ]
 }
 ```
+
+`device.abi` is `Abi.current().toString()` from `dart:ffi` (`android_arm64`,
+`ios_arm64`). `flutter` comes from `--dart-define=FLUTTER_VERSION=...`; the
+bench scripts pass the version they detect, and the default is 3.47.6. In a
+`classify` suite the stats object is named `overhead`, not `bridge` (the name
+`bridge` already holds the bridge's own name): it is the time that is neither
+preprocessing nor inference, which is the bridge.
 
 Bridge names are `BridgeKind.name`. Times are microseconds as doubles. Payload
 sizes for `round_trip`: 0, 1024, 65536, 602112 (224x224x3 float32), 8294400
@@ -203,8 +237,9 @@ working app on one straight line, as in workshop-repo-template:
 | step-06 | Token streaming: C demo generator, then the real LLM |
 | final | Benchmark screen, integration test, report tool, README results |
 
-Tags are created by the maintainer only after `check-steps.sh` passes. Agents
-commit nothing.
+Tags are created by the maintainer only after `check-steps.sh` passes.
+
+Git note: agents commit nothing.
 
 ## Code style
 
@@ -219,6 +254,8 @@ commit nothing.
 Agents work in a Linux VM that has this folder mounted and Flutter 3.47.6 for
 Linux at `$HOME/tools/flutter/bin`. In that VM:
 
+- `scripts/check-all.sh` runs all of the following, plus the report tool's
+  tests and a syntax check of the scripts.
 - `flutter analyze` and `flutter test` for the app and each package.
 - `dart test` in `packages/ffi_bridge` runs the C code for real (Linux build
   through the build hook).

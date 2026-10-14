@@ -1,0 +1,41 @@
+{
+  // Run and debug configurations for VS Code. Pick one in the Run and Debug
+  // view (Cmd + Shift + D), then press F5.
+  //
+  // These need the Flutter extension (Dart-Code.flutter); see extensions.json.
+  // Choose the device in the status bar at the bottom right.
+  //
+  // For numbers that count, use "Profile on a phone" on a real phone, or the
+  // benchmark tasks (Terminal, Run Task). Debug mode is slower on purpose, and
+  // profile mode does not run on emulators or simulators.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Profile on a phone",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "app",
+      "program": "lib/main.dart",
+      // Release speed, with DevTools still attached: the mode the talk shows.
+      "flutterMode": "profile"
+    },
+    {
+      "name": "Preview with fakes",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "app",
+      "program": "lib/main.dart",
+      // Fake bridges, no native code: runs on any device, even an emulator.
+      // The numbers are made up. This is for looking at screens only.
+      "args": ["--dart-define=PREVIEW=true"]
+    },
+    {
+      "name": "Debug",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "app",
+      "program": "lib/main.dart",
+      "flutterMode": "debug"
+    }
+  ]
+}

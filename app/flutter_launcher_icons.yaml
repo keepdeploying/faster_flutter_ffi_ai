@@ -1,10 +1,14 @@
 # Run by scripts/setup.sh after `flutter create`:
 #   dart run flutter_launcher_icons -f flutter_launcher_icons.yaml
-# The mark is assets/icon/icon.svg, rendered to the PNGs below at 1024 px.
+# The mark is assets/icon/icon.svg (icon_foreground.svg for the Android layer),
+# rendered to the PNGs below at 1024 px with cairosvg.
 flutter_launcher_icons:
   image_path: assets/icon/icon.png
   android: true
   adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: assets/icon/icon_foreground.png
+  # The foreground PNG is already drawn inside the 66 dp safe zone, so no extra
+  # inset (the tool would otherwise add 16% on every side and shrink the mark).
+  adaptive_icon_foreground_inset: 0
   ios: true
   remove_alpha_ios: true

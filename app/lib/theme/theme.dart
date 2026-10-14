@@ -2,8 +2,6 @@
 // dark themes, so there is no dark mode. Elevation tints and shadows are off:
 // depth comes from hairlines, not from shade.
 
-import 'dart:ui' show FontFeature, FontVariation;
-
 import 'package:flutter/material.dart';
 
 import 'tokens.dart';
@@ -99,6 +97,16 @@ ThemeData buildTheme() {
     colorScheme: scheme,
     fontFamily: Fonts.sans,
     textTheme: textTheme,
+    // One icon style everywhere: Material Symbols Rounded, weight 400, optical
+    // size 24 (a little heavier than the default 48, which reads thin from the
+    // back of a room), outline unless a widget asks for fill.
+    iconTheme: const IconThemeData(
+      color: Palette.ink,
+      weight: 400,
+      grade: 0,
+      opticalSize: 24,
+      fill: 0,
+    ),
     scaffoldBackgroundColor: Palette.paper,
     canvasColor: Palette.paper,
     dividerColor: Palette.line,
@@ -123,7 +131,7 @@ ThemeData buildTheme() {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: Palette.accent,
+        backgroundColor: Palette.accentStrong,
         foregroundColor: Palette.paper,
         disabledBackgroundColor: Palette.line,
         disabledForegroundColor: Palette.quietText,

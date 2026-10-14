@@ -54,9 +54,13 @@ class LogBarChart extends StatelessWidget {
     return out;
   }
 
-  static String _tickLabel(double us) => us < 1000
-      ? '${us.toStringAsFixed(0)} µs'
-      : '${(us / 1000).toStringAsFixed(0)} ms';
+  /// Units only where they change, so the labels stay short enough not to
+  /// touch: 1 µs, 10, 100, 1 ms, 10, 100.
+  static String _tickLabel(double us) {
+    if (us == 1) return '1 µs';
+    if (us == 1000) return '1 ms';
+    return us < 1000 ? us.toStringAsFixed(0) : (us / 1000).toStringAsFixed(0);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +101,10 @@ class LogBarChart extends StatelessWidget {
                   children: [
                     for (final t in ticks)
                       Positioned(
-                        left: (_fraction(t) * c.maxWidth) - 28,
+                        left: ((_fraction(t) * c.maxWidth) - 28).clamp(
+                          0.0,
+                          c.maxWidth - 56,
+                        ),
                         width: 56,
                         top: 0,
                         child: Text(
@@ -130,7 +137,7 @@ class _BarRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Space.s2),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -152,12 +159,12 @@ class _BarRow extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: Space.s2),
+          const SizedBox(height: Space.s1),
           LayoutBuilder(
             builder: (context, c) => Align(
               alignment: Alignment.centerLeft,
               child: Container(
-                height: 16,
+                height: 12,
                 width: fraction == null
                     ? 0
                     : math.max(4, fraction! * c.maxWidth),

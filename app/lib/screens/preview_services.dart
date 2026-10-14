@@ -8,7 +8,6 @@
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
@@ -48,8 +47,8 @@ class FrameTimeBuffer extends ChangeNotifier
 }
 
 class _Counter extends ChangeNotifier implements ValueListenable<int> {
-  _Counter([this._value = 0]);
-  int _value;
+  _Counter();
+  int _value = 0;
 
   @override
   int get value => _value;
@@ -206,7 +205,9 @@ class PreviewClassifier implements Classifier {
       while (sw.elapsedMilliseconds < blockUiMs) {}
     }
     // Same model on both paths, so the same answer. Only the bridge differs.
-    final h = frame.rgba.isEmpty ? 0 : (frame.rgba[0] + frame.rgba[frame.rgba.length ~/ 2]);
+    final h = frame.rgba.isEmpty
+        ? 0
+        : (frame.rgba[0] + frame.rgba[frame.rgba.length ~/ 2]);
     final index = h % labels.length;
     final confidence = 0.71 + (h % 25) / 100;
     final channel = !kind.isFfi;

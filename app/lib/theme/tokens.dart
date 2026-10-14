@@ -17,6 +17,10 @@ abstract final class Palette {
   static const channel = Color(0xFFEA4335);
   static const ffi = Color(0xFF34A853);
   static const accent = Color(0xFF4285F4);
+
+  /// The accent, darkened for filled buttons only: white on #4285F4 is 3.6:1,
+  /// white on this is 5.4:1, which meets the 4.5:1 rule for the label.
+  static const accentStrong = Color(0xFF1967D2);
   static const budget = Color(0xFFF9AB00);
 
   /// Secondary text: ink at 72%, which is 5.2:1 on paper. The brief says 55%,
@@ -51,7 +55,7 @@ abstract final class Space {
   static const double s8 = 64;
 
   /// Side gutter of every screen.
-  static const double gutter = 20;
+  static const double gutter = 24;
 }
 
 /// Type scale in logical pixels (sp): 15 / 20 / 28 / 44 / 72.

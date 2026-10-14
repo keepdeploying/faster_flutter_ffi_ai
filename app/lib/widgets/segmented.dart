@@ -54,6 +54,8 @@ class Segmented<T> extends StatelessWidget {
         for (var i = 0; i < options.length; i++) ...[
           if (i > 0) const SizedBox(width: Space.s2),
           Expanded(
+            // Longer labels get more room, so "Demo generator" is not cut.
+            flex: stacked ? 1 : options[i].label.length + 6,
             child: _Segment<T>(
               option: options[i],
               isSelected: options[i].value == selected,
@@ -124,15 +126,19 @@ class _Segment<T> extends StatelessWidget {
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: stacked ? 72 : 56),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Space.s2,
+              padding: EdgeInsets.symmetric(
+                horizontal: stacked ? Space.s1 : Space.s2,
                 vertical: Space.s2,
               ),
               child: Center(
                 child: stacked
                     ? Column(
                         mainAxisSize: MainAxisSize.min,
-                        children: [icon, const SizedBox(height: Space.s1), label],
+                        children: [
+                          icon,
+                          const SizedBox(height: Space.s1),
+                          label,
+                        ],
                       )
                     : Row(
                         mainAxisSize: MainAxisSize.min,

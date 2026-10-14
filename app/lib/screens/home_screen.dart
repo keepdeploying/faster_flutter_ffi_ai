@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../app_services.dart';
 import '../theme/theme.dart';
 import '../theme/tokens.dart';
+import '../widgets/app_mark.dart';
 import '../widgets/pulse_strip.dart';
 import 'benchmark_screen.dart';
 import 'classify_screen.dart';
@@ -15,13 +16,15 @@ class HomeScreen extends StatelessWidget {
 
   static const talkTitle = 'Faster Flutter';
   static const talkSubtitle = 'Accessing on-device AI with Dart FFI';
-  static const speaker = 'Obumuneme Nwabude, GDE Cloud AI & Dart-Flutter';
+  static const speakerName = 'Obumuneme Nwabude';
+  static const speakerRole = 'GDE Cloud AI & Dart-Flutter';
 
   @override
   Widget build(BuildContext context) {
     final services = AppServices.of(context);
     void open(Widget screen) =>
-        Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+        Navigator.of(context)
+            .push(MaterialPageRoute<void>(builder: (_) => screen));
 
     return Scaffold(
       body: Column(
@@ -45,37 +48,46 @@ class HomeScreen extends StatelessWidget {
                   Space.s5,
                 ),
                 children: [
-                  Semantics(
-                    header: true,
-                    child: Text(talkTitle, style: AppText.display),
+                  Row(
+                    children: [
+                      const AppMark(size: 48),
+                      const SizedBox(width: Space.s3),
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          child: Text(talkTitle, style: AppText.display),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: Space.s2),
                   Text(talkSubtitle, style: AppText.body),
                   const SizedBox(height: Space.s3),
-                  Text(speaker, style: AppText.quiet(AppText.small)),
+                  Text(speakerName, style: AppText.smallStrong),
+                  Text(speakerRole, style: AppText.quiet(AppText.small)),
                   const SizedBox(height: Space.s5),
                   _HomeRow(
                     icon: Symbols.speed_rounded,
                     title: 'Race the bridges',
-                    line: 'Five ways across, one payload, p50 on a log scale.',
+                    line: 'Five ways across, one payload.',
                     onTap: () => open(const RaceScreen()),
                   ),
                   _HomeRow(
                     icon: Symbols.image_search_rounded,
                     title: 'Classify frames',
-                    line: 'One model on a channel or FFI, and where it runs.',
+                    line: 'One model, a channel or FFI.',
                     onTap: () => open(const ClassifyScreen()),
                   ),
                   _HomeRow(
                     icon: Symbols.edit_note_rounded,
                     title: 'Generate text',
-                    line: 'Tokens stream in while the UI keeps its frames.',
+                    line: 'Tokens stream, the UI keeps up.',
                     onTap: () => open(const GenerateScreen()),
                   ),
                   _HomeRow(
                     icon: Symbols.query_stats_rounded,
                     title: 'Run the benchmark',
-                    line: 'Every suite in one pass, saved as a results file.',
+                    line: 'Every suite in one pass.',
                     onTap: () => open(const BenchmarkScreen()),
                     last: true,
                   ),
@@ -127,7 +139,7 @@ class _HomeRow extends StatelessWidget {
           child: Row(
             children: [
               SizedBox(
-                width: 48,
+                width: 40,
                 child: Icon(icon, size: 36, color: Palette.ink),
               ),
               const SizedBox(width: Space.s3),
@@ -144,7 +156,7 @@ class _HomeRow extends StatelessWidget {
               const SizedBox(width: Space.s2),
               const Icon(
                 Symbols.arrow_forward_rounded,
-                size: 28,
+                size: 24,
                 color: Palette.quiet,
               ),
             ],

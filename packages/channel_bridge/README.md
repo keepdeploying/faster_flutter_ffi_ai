@@ -85,11 +85,75 @@ the FFI classifier the same number.
   the version `flutter_litert` 3.9.4 uses for its Interpreter on Android. The
   Java API of that line is `org.tensorflow.lite.Interpreter`. `minSdk` 24.
 - iOS (Swift, Swift Package Manager; the podspec is only the CocoaPods
-  fallback): `roundTrip` and the binary channel are implemented. `loadModel` and
-  `classify` answer `FlutterError("unsupported_on_ios")`. The TODO in
-  `ChannelBridgePlugin.swift` says what is missing: the TensorFlow Lite C runtime
-  cannot simply be added to this package while the app also links
-  `flutter_litert`, which ships it.
+  fallback): everything above, with the same behaviour as Android. `roundTrip`
+  and the binary channel are unchanged. `loadModel` and `classify` run the same
+  float MobileNet through the TensorFlow Lite C API. The resize is a port of
+  `Preprocess.kt` (`Preprocess.swift`), `site: "platform"` runs in the handler on
+  the main thread, any other site runs on a serial `DispatchQueue` and answers on
+  the main thread, and both timings use `DispatchTime.now().uptimeNanoseconds`.
+  iOS 15 or newer.
+
+### iOS: where the TensorFlow Lite runtime comes from
+
+The plugin has **no build-time dependency on any TensorFlow Lite binary**. At
+`loadModel` time `TfLiteRuntime.swift` looks up the 20 C API functions it needs
+with `dlsym(RTLD_DEFAULT, "TfLiteModelCreate")` and so on, and calls them through
+`@convention(c)` function values. The functions are already in the process
+because `flutter_litert` links `TensorFlowLiteC.framework`, and its
+`flutter_litert_delegate_symbols.c` references every exported C function so the
+linker cannot drop them. If they are not there, `loadModel` fails with
+`FlutterError("runtime_missing")` and a message that names the missing symbols
+and says to add `flutter_litert`.
+
+Why this and not a second copy of the runtime:
+
+- `flutter_litert` 3.9.4 itself finds the runtime this way. Its Dart side opens
+  `DynamicLibrary.process()` on iOS (`lib/src/bindings/bindings.dart`), a lookup
+  in the running process that its own podspec describes as
+  `dlsym(RTLD_DEFAULT, ...)`. For frameworks loaded at launch, which this one is,
+  our Swift lookup sees exactly the symbols Dart sees, and the channel and FFI
+  classifiers run the same compiled runtime.
+  That is what the demo needs: same model, same runtime, only the bridge differs.
+- `flutter_litert` declares `TensorFlowLiteC` as a SwiftPM binary target (a large
+  xcframework from its own GitHub release, `flex-v1.1.1`, checksum pinned in its
+  `Package.swift`) and links it into its own dynamic product
+  (`.library(name: "flutter-litert", type: .dynamic, ...)`), with anchors and
+  linker settings so the symbols survive stripping (its CHANGELOG, 2.8.0 and
+  2.8.2). Declaring the same binary target in this package would put a second
+  `TensorFlowLiteC` framework of the same name into the same app, and a second
+  copy of the C++ runtime into one process. Whether SwiftPM rejects the duplicate
+  or links it and then misbehaves was not tried (there is no Xcode where this was
+  written) and the sources below do not say. Either outcome is worse than no
+  dependency, and the failure would show up on the stage laptop.
+- The download URL and checksum belong to another project's release. A copy here
+  would break the day they republish.
+- Cost: this plugin only works in an app that also depends on `flutter_litert`.
+  That is always true in this repository, and the error says so otherwise.
+
+To use this plugin without `flutter_litert`, declare a TensorFlow Lite binary
+target here instead. That is a separate change.
+
+For a fair comparison the FFI classifier must use the same defaults as this
+classifier: CPU, `threads` equal to the `threads` argument, and **no delegate**.
+`flutter_litert`'s `InterpreterFactory` picks the Metal GPU delegate on iOS in
+auto mode (`lib/src/interpreter_factory.dart`, `_createAutoMode`), so build the
+interpreter with `Interpreter.fromAsset(..., options: InterpreterOptions()..threads = n)`
+instead. This plugin adds no delegate. It uses whatever the packaged runtime
+applies by default, which is also true of the Android `Interpreter`.
+
+Sources: `flutter_litert` 3.9.4,
+[source](https://github.com/hugocornellier/flutter_litert) and
+[changelog](https://pub.dev/packages/flutter_litert/changelog) (files
+`ios/flutter_litert/Package.swift`, `ios/flutter_litert.podspec`,
+`lib/src/bindings/bindings.dart`, `src/tensorflow_lite/c_api.h` for the function
+signatures); Dart,
+[`DynamicLibrary.process`](https://api.dart.dev/stable/dart-ffi/DynamicLibrary/DynamicLibrary.process.html);
+Apple, [`dlsym(3)`](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/dlsym.3.html);
+Flutter, [Swift Package Manager for plugin authors](https://docs.flutter.dev/packages-and-plugins/swift-package-manager/for-plugin-authors).
+
+What is checked and how: see "Checking it" below. The Swift runtime layer was
+type-checked and run on Linux against a stub of the C API, never against the real
+iOS framework.
 
 ## Checking it
 
@@ -99,6 +163,24 @@ flutter test        # Dart tests with mocked channels
 ```
 
 The Kotlin and Swift code compiles only in a real Android or iOS build
-(`scripts/bench-android.sh`, `scripts/bench-ios.sh`). `./gradlew testDebugUnitTest`
+(`scripts/bench-android.sh`, `scripts/bench-ios.sh`). `ChannelBridgePlugin.swift`
+imports Flutter, so only that build checks it. `./gradlew testDebugUnitTest`
 in an app's `android/` directory runs the small Kotlin tests for the checksum and
 the resize.
+
+The Swift files that do not import Flutter (`Preprocess.swift`,
+`TfLiteRuntime.swift`, `Classifier.swift`) also build on Linux. With a Swift
+toolchain from swift.org and `gcc` on the path:
+
+```sh
+ios/linux_check/run.sh
+```
+
+It builds a small stand-in for the TFLite C API (`tflite_stub.c`, same exported
+names and signatures as `c_api.h`), loads it with `RTLD_GLOBAL` so that
+`dlsym(RTLD_DEFAULT, ...)` finds it as it finds `flutter_litert`'s framework on
+iOS, and checks: the known-pixel cases of `NativeMathTest.kt`, the resize against
+an independent `Double` implementation, the labels parser, the error messages, the
+whole load and classify path with the real `mobilenet_v1_1.0_224.tflite`, and that
+every C object is freed. The stub's "inference" is not MobileNet, so it says
+nothing about accuracy or speed on a phone.

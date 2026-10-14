@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../app_services.dart';
-import '../bridges/bridge.dart';
 import '../theme/theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/big_number.dart';
@@ -64,6 +63,11 @@ class _GenerateScreenState extends State<GenerateScreen> {
               first ??= now;
               _tokens++;
               if (!mounted) return;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (_scroll.hasClients) {
+                  _scroll.jumpTo(_scroll.position.maxScrollExtent);
+                }
+              });
               setState(() {
                 _output += token;
                 _firstTokenMs = (first! - start) / 1000;
@@ -159,22 +163,36 @@ class _GenerateScreenState extends State<GenerateScreen> {
               label: const Text('Generate'),
             ),
           const SizedBox(height: Space.s4),
+          // A fixed height, so the screen does not jump while text streams in.
+          // It follows the newest words.
           Container(
-            constraints: const BoxConstraints(minHeight: 176),
+            height: 192,
             width: double.infinity,
-            padding: const EdgeInsets.all(Space.s4),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(Radii.medium),
               border: Border.all(color: Palette.line, width: 1.5),
             ),
-            child: Semantics(
-              liveRegion: true,
-              label: 'Generated text',
-              child: Text(
-                _output.isEmpty ? 'The text appears here, token by token.' : _output,
-                style: _output.isEmpty
-                    ? AppText.quiet(AppText.monoBody)
-                    : AppText.monoBody,
+            clipBehavior: Clip.antiAlias,
+            child: SingleChildScrollView(
+              controller: _scroll,
+              padding: const EdgeInsets.symmetric(
+                horizontal: Space.s4,
+                vertical: Space.s3,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: Semantics(
+                  liveRegion: true,
+                  label: 'Generated text',
+                  child: Text(
+                    _output.isEmpty
+                        ? 'The text appears here, token by token.'
+                        : _output,
+                    style: _output.isEmpty
+                        ? AppText.quiet(AppText.monoBody)
+                        : AppText.monoBody,
+                  ),
+                ),
               ),
             ),
           ),
@@ -183,23 +201,31 @@ class _GenerateScreenState extends State<GenerateScreen> {
             Text(_error!, style: AppText.small),
           ],
           const SizedBox(height: Space.s5),
-          Wrap(
-            spacing: Space.s6,
-            runSpacing: Space.s4,
-            crossAxisAlignment: WrapCrossAlignment.end,
-            children: [
-              BigNumber(
-                value: tps == null ? '–' : tps.toStringAsFixed(1),
-                unit: 'tokens/s',
-                caption: 'speed',
-                hero: true,
-              ),
-              BigNumber(
-                value: first == null ? '–' : first.toStringAsFixed(1),
-                unit: 'ms',
-                caption: 'first token',
-              ),
-            ],
+          BigNumber(
+            value: tps == null ? '–' : tps.toStringAsFixed(1),
+            unit: 'tokens/s',
+            caption: 'generation speed',
+            hero: true,
+          ),
+          const SizedBox(height: Space.s3),
+          Semantics(
+            label:
+                'First token ${first == null ? 'not yet' : '${first.toStringAsFixed(1)} milliseconds'}',
+            excludeSemantics: true,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  first == null ? '–' : first.toStringAsFixed(1),
+                  style: AppText.monoHeading,
+                ),
+                const SizedBox(width: Space.s1),
+                Text('ms', style: AppText.quiet(AppText.monoBody)),
+                const SizedBox(width: Space.s3),
+                Text('to the first token', style: AppText.quiet(AppText.body)),
+              ],
+            ),
           ),
         ],
       ],

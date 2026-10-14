@@ -1,0 +1,74 @@
+{
+  // Run a task: Terminal menu, Run Task..., then pick one. Each task runs a
+  // script from scripts/ in the terminal panel, so it needs no typing.
+  //
+  // The benchmark tasks need a physical phone: plug it in first. With more
+  // than one phone connected, the script asks which one in the terminal.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Setup",
+      "detail": "Check tools, generate android/ and ios/, packages, icons. Run once after cloning.",
+      "type": "shell",
+      "command": "scripts/setup.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Fetch models",
+      "detail": "Download the LLM model (491 MB) into models/ and check its SHA-256.",
+      "type": "shell",
+      "command": "scripts/fetch-models.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Benchmark Android",
+      "detail": "Full benchmark in profile mode on a connected Android phone, then the report.",
+      "type": "shell",
+      "command": "scripts/bench-android.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Benchmark Android quick",
+      "detail": "A short run to check that everything works. Do not quote its numbers.",
+      "type": "shell",
+      "command": "scripts/bench-android.sh --quick",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Benchmark iOS",
+      "detail": "Full benchmark in profile mode on a connected iPhone, then the report.",
+      "type": "shell",
+      "command": "scripts/bench-ios.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Make report from latest raw results",
+      "detail": "Tables and SVG charts from the newest file in results/raw/, written to results/.",
+      "type": "shell",
+      "command": "scripts/report-latest.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Analyze and test everything",
+      "detail": "flutter analyze and test for the app and every package, the report tool, and the scripts.",
+      "type": "shell",
+      "command": "scripts/check-all.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    }
+  ]
+}

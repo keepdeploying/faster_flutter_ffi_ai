@@ -16,6 +16,9 @@ Swift Package Manager is the primary integration; this podspec is the CocoaPods 
   s.source           = { :path => '.' }
   s.source_files = 'channel_bridge/Sources/channel_bridge/**/*'
   s.dependency 'Flutter'
+  # No TensorFlow Lite dependency on purpose: the classifier calls the C API that the
+  # flutter_litert pod already links, through dlsym (see TfLiteRuntime.swift and the
+  # README). The app must depend on flutter_litert.
   s.platform = :ios, '15.0'
 
   # Flutter.framework does not contain a i386 slice.

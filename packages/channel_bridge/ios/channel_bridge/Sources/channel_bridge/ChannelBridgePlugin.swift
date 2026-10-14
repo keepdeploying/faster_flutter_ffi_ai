@@ -1,5 +1,6 @@
+import Dispatch
 import Flutter
-import UIKit
+import Foundation
 
 /// The two Flutter channels of the demo. Names, methods and reply shapes are the
 /// contract in docs/ARCHITECTURE.md; the Dart side is lib/src/*.dart.
@@ -10,15 +11,41 @@ import UIKit
 ///    (one copy). The handler runs there and the reply is encoded again.
 ///  - "faster_flutter/binary": FlutterBinaryCodec passes the NSData through, with
 ///    no decoding. The reply is 4 bytes.
+///  - classify: the frame arrives like the method payload, then the work moves to
+///    a serial background queue (site "background") and the reply is posted back
+///    to the main thread. Site "platform" runs it right in the handler so the
+///    jank demo can show what that costs. The same split as ChannelBridgePlugin.kt.
+///
+/// The model runs in the TensorFlow Lite C runtime that flutter_litert links; see
+/// TfLiteRuntime.swift and the README for why this plugin does not bring its own.
 public final class ChannelBridgePlugin: NSObject, FlutterPlugin {
   static let methodChannelName = "faster_flutter/method"
   static let binaryChannelName = "faster_flutter/binary"
+  private static let defaultThreads = 4
+
+  private let registrar: FlutterPluginRegistrar
+
+  /// One serial queue for loading and for background classification. Because both run
+  /// here, a load never overlaps a classify that is already running on this queue.
+  private let worker = DispatchQueue(label: "channel_bridge.classify")
+
+  // Written by loadModel (on `worker`), read by classify (main thread). The lock makes
+  // the hand-off safe. A classifier that is replaced while a call still uses it stays
+  // alive until that call returns, because the call holds a reference.
+  private let stateLock = NSLock()
+  private var classifier: Classifier?
+  private var runtime: TfLiteAPI?
+
+  init(registrar: FlutterPluginRegistrar) {
+    self.registrar = registrar
+    super.init()
+  }
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let messenger = registrar.messenger()
 
     let method = FlutterMethodChannel(name: methodChannelName, binaryMessenger: messenger)
-    registrar.addMethodCallDelegate(ChannelBridgePlugin(), channel: method)
+    registrar.addMethodCallDelegate(ChannelBridgePlugin(registrar: registrar), channel: method)
 
     let binary = FlutterBasicMessageChannel(
       name: binaryChannelName,
@@ -43,26 +70,136 @@ public final class ChannelBridgePlugin: NSObject, FlutterPlugin {
         return
       }
       result(Int(byteSum(typed.data)))
-    case "loadModel", "classify":
-      // TODO(classifier-ios): run the same MobileNet on iOS. What is missing is the
-      // runtime. flutter_litert ships TensorFlowLiteC as a SwiftPM binary target
-      // (a GitHub release xcframework) and the app already links it. This plugin
-      // should not add a second copy: two binary targets with the same name
-      // (TensorFlowLiteC) in one build are likely to be rejected by SwiftPM, and
-      // two copies of the TensorFlow Lite symbols would clash at link time. This
-      // could not be tried here: the Linux VM has no Swift toolchain.
-      // Options: (a) call the C API (TfLiteModelCreate, TfLiteInterpreter*)
-      // through dlsym on the copy flutter_litert already loaded, or (b) have the
-      // host app pass in a runtime. Preprocessing is a direct port of
-      // Preprocess.kt, and the timing code is DispatchTime.now().uptimeNanoseconds.
-      result(
-        FlutterError(
-          code: "unsupported_on_ios",
-          message: "The channel classifier is not implemented on iOS yet. See the TODO in ChannelBridgePlugin.swift.",
-          details: nil))
+    case "loadModel":
+      loadModel(call, result: result)
+    case "classify":
+      classify(call, result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  // MARK: loadModel
+
+  private func loadModel(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any],
+      let modelKey = args["model"] as? String,
+      let labelsKey = args["labels"] as? String
+    else {
+      result(FlutterError(code: "bad_arguments", message: "loadModel expects {model, labels, threads}", details: nil))
+      return
+    }
+    let threads = (args["threads"] as? Int) ?? ChannelBridgePlugin.defaultThreads
+    guard let modelPath = assetPath(modelKey), let labelsPath = assetPath(labelsKey) else {
+      result(FlutterError(code: "load_failed", message: "asset not found: \(modelKey) or \(labelsKey)", details: nil))
+      return
+    }
+
+    // Load on the worker queue: the model file is 17 MB.
+    worker.async {
+      let outcome = Result<Void, Error> {
+        let runtime = try self.loadedRuntime()
+        let model = try Data(contentsOf: URL(fileURLWithPath: modelPath), options: .mappedIfSafe)
+        let labels = parseLabels(try String(contentsOfFile: labelsPath, encoding: .utf8))
+        let next = try model.withUnsafeBytes {
+          try Classifier(api: runtime, modelBytes: $0, labels: labels, threads: threads)
+        }
+        self.stateLock.lock()
+        self.classifier = next  // the previous one is freed when its last user lets go
+        self.stateLock.unlock()
+      }
+      DispatchQueue.main.async {
+        switch outcome {
+        case .success: result(nil)
+        case .failure(let error): result(ChannelBridgePlugin.flutterError(error, defaultCode: "load_failed"))
+        }
+      }
+    }
+  }
+
+  /// Resolves the TFLite C symbols once. Runs on `worker`.
+  private func loadedRuntime() throws -> TfLiteAPI {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    if let runtime { return runtime }
+    let resolved = try TfLiteAPI()
+    runtime = resolved
+    return resolved
+  }
+
+  /// The file system path of a Flutter asset inside the app bundle.
+  private func assetPath(_ assetKey: String) -> String? {
+    let key = registrar.lookupKey(forAsset: assetKey)
+    if let path = Bundle.main.path(forResource: key, ofType: nil) { return path }
+    let candidate = URL(fileURLWithPath: Bundle.main.bundlePath).appendingPathComponent(key).path
+    return FileManager.default.fileExists(atPath: candidate) ? candidate : nil
+  }
+
+  // MARK: classify
+
+  private func classify(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any],
+      let typed = args["rgba"] as? FlutterStandardTypedData,
+      let width = args["width"] as? Int,
+      let height = args["height"] as? Int
+    else {
+      result(FlutterError(code: "bad_arguments", message: "classify expects {rgba, width, height}", details: nil))
+      return
+    }
+    let onPlatformThread = (args["site"] as? String) == "platform"
+
+    stateLock.lock()
+    let current = classifier
+    stateLock.unlock()
+    guard let current else {
+      result(FlutterError(code: "not_loaded", message: "call loadModel first", details: nil))
+      return
+    }
+
+    let frame = typed.data
+    let compute: () -> Result<ClassifyResult, Error> = {
+      Result {
+        try frame.withUnsafeBytes {
+          try current.classify(rgba: $0.bindMemory(to: UInt8.self), width: width, height: height)
+        }
+      }
+    }
+
+    if onPlatformThread {
+      // Blocks the platform thread, and with merged threads the UI thread, until done.
+      ChannelBridgePlugin.deliver(result, compute())
+      return
+    }
+    worker.async {
+      // Compute here, then answer on the main thread, where the call arrived.
+      let outcome = compute()
+      DispatchQueue.main.async { ChannelBridgePlugin.deliver(result, outcome) }
+    }
+  }
+
+  private static func deliver(_ result: FlutterResult, _ outcome: Result<ClassifyResult, Error>) {
+    switch outcome {
+    case .success(let value):
+      result([
+        "index": value.index,
+        "label": value.label,
+        "confidence": value.confidence,
+        "preprocessUs": value.preprocessMicros,
+        "inferenceUs": value.inferenceMicros,
+      ] as [String: Any])
+    case .failure(let error):
+      result(flutterError(error, defaultCode: "classify_failed"))
+    }
+  }
+
+  private static func flutterError(_ error: Error, defaultCode: String) -> FlutterError {
+    if let bridge = error as? BridgeError {
+      return FlutterError(code: bridge.code, message: bridge.message, details: nil)
+    }
+    if let preprocess = error as? PreprocessError {
+      return FlutterError(code: defaultCode, message: preprocess.description, details: nil)
+    }
+    return FlutterError(code: defaultCode, message: error.localizedDescription, details: nil)
   }
 }
 

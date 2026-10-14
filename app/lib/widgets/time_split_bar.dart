@@ -68,6 +68,7 @@ class TimeSplitBar extends StatelessWidget {
                         if (widths[i] > 0)
                           SizedBox(
                             width: widths[i] * scale,
+                            height: double.infinity,
                             child: ColoredBox(color: parts[i].color),
                           ),
                     ],

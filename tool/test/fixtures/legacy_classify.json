@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "createdAt": "2026-10-14T11:30:00Z",
+  "device": {
+    "platform": "ios",
+    "model": "Fixture <pad> & phone",
+    "os": "19.0",
+    "abi": "ios_arm64"
+  },
+  "flutter": "3.47.6",
+  "buildMode": "profile",
+  "suites": [
+    {
+      "suite": "classify",
+      "site": "uiThread",
+      "runs": 10,
+      "total": {
+        "p50Us": 30000,
+        "p95Us": 48000.0,
+        "p99Us": 67200.0,
+        "meanUs": 33600.0,
+        "minUs": 21000.0,
+        "maxUs": 144000.0
+      },
+      "preprocess": {
+        "p50Us": 10000,
+        "p95Us": 16000.0,
+        "p99Us": 22400.0,
+        "meanUs": 11200.0,
+        "minUs": 7000.0,
+        "maxUs": 48000.0
+      },
+      "inference": {
+        "p50Us": 18000,
+        "p95Us": 28800.0,
+        "p99Us": 40320.0,
+        "meanUs": 20160.0,
+        "minUs": 12600.0,
+        "maxUs": 86400.0
+      },
+      "bridge": {
+        "p50Us": 2000,
+        "p95Us": 3200.0,
+        "p99Us": 4480.0,
+        "meanUs": 2240.0,
+        "minUs": 1400.0,
+        "maxUs": 9600.0
+      }
+    }
+  ]
+}

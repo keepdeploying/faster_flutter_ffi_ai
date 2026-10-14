@@ -82,11 +82,11 @@ class ScreenFrame extends StatelessWidget {
               top: false,
               bottom: !stripAtBottom,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(
+                padding: EdgeInsets.fromLTRB(
                   Space.gutter,
                   Space.s3,
                   Space.gutter,
-                  Space.s6,
+                  stripAtBottom ? Space.s2 : Space.s6,
                 ),
                 children: children,
               ),

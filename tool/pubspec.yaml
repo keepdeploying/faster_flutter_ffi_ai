@@ -1,0 +1,19 @@
+name: faster_flutter_tool
+description: "Turns a results file from the Faster Flutter benchmark into Markdown tables and SVG charts."
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  # Command line flags for bin/report.dart.
+  args: ^2.7.0
+  # Joins file paths the same way on a Mac and in a Linux VM.
+  path: ^1.9.1
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.0
+  # Checks that every chart is well-formed XML.
+  xml: ^6.5.0

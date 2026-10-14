@@ -37,18 +37,22 @@ class _FrameViewState extends State<FrameView> {
     final f = widget.frame;
     if (f == null) return;
     final serial = ++_serial;
-    ui.decodeImageFromPixels(f.rgba, f.width, f.height, ui.PixelFormat.rgba8888, (
-      image,
-    ) {
-      if (!mounted || serial != _serial) {
-        image.dispose();
-        return;
-      }
-      setState(() {
-        _image?.dispose();
-        _image = image;
-      });
-    });
+    ui.decodeImageFromPixels(
+      f.rgba,
+      f.width,
+      f.height,
+      ui.PixelFormat.rgba8888,
+      (image) {
+        if (!mounted || serial != _serial) {
+          image.dispose();
+          return;
+        }
+        setState(() {
+          _image?.dispose();
+          _image = image;
+        });
+      },
+    );
   }
 
   @override

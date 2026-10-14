@@ -101,7 +101,8 @@ class _RaceScreenState extends State<RaceScreen> {
     } on Object catch (e) {
       if (mounted) {
         setState(
-          () => _error = 'The race stopped: $e. Run it again, or pick a smaller payload.',
+          () => _error =
+              'The race stopped: $e. Run it again, or pick a smaller payload.',
         );
       }
     } finally {
@@ -127,7 +128,9 @@ class _RaceScreenState extends State<RaceScreen> {
       final fast = measured.first;
       final slow = measured.last;
       final ratio = _p50[slow]! / _p50[fast]!;
-      heroValue = ratio >= 100 ? ratio.toStringAsFixed(0) : ratio.toStringAsFixed(1);
+      heroValue = ratio >= 100
+          ? ratio.toStringAsFixed(0)
+          : ratio.toStringAsFixed(1);
       caption =
           '${BridgeStyle.of(fast).label} is faster than ${BridgeStyle.of(slow).label}';
       heroValue = '$heroValue×';
@@ -136,16 +139,18 @@ class _RaceScreenState extends State<RaceScreen> {
     return ScreenFrame(
       title: 'Race the bridges',
       children: [
-        Wrap(
-          spacing: Space.s2,
-          runSpacing: Space.s2,
+        Row(
           children: [
-            for (final size in raceSizes.keys)
-              _SizeChip(
-                bytes: size,
-                selected: size == _bytes,
-                onTap: _running ? null : () => setState(() => _bytes = size),
+            for (final size in raceSizes.keys) ...[
+              if (size != raceSizes.keys.first) const SizedBox(width: Space.s2),
+              Expanded(
+                child: _SizeChip(
+                  bytes: size,
+                  selected: size == _bytes,
+                  onTap: _running ? null : () => setState(() => _bytes = size),
+                ),
               ),
+            ],
           ],
         ),
         const SizedBox(height: Space.s3),
@@ -153,28 +158,29 @@ class _RaceScreenState extends State<RaceScreen> {
           '${groupDigits(_bytes)} bytes. ${raceSizes[_bytes] ?? ''}',
           style: AppText.quiet(AppText.small),
         ),
-        const SizedBox(height: Space.s4),
+        const SizedBox(height: Space.s3),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Expanded(
-              child: BigNumber(value: heroValue, caption: caption, hero: true),
-            ),
+            Expanded(child: BigNumber(value: heroValue, hero: true)),
+            const SizedBox(width: Space.s3),
+            if (_running)
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _stop = true),
+                icon: const Icon(Symbols.stop_rounded, size: 28),
+                label: const Text('Stop'),
+              )
+            else
+              FilledButton.icon(
+                onPressed: () => _run(services),
+                icon: const Icon(Symbols.play_arrow_rounded, size: 28, fill: 1),
+                label: const Text('Run'),
+              ),
           ],
         ),
-        const SizedBox(height: Space.s4),
-        if (_running)
-          OutlinedButton.icon(
-            onPressed: () => setState(() => _stop = true),
-            icon: const Icon(Symbols.stop_rounded, size: 28),
-            label: const Text('Stop'),
-          )
+        if (caption != null)
+          Text(caption, style: AppText.quiet(AppText.body))
         else
-          FilledButton.icon(
-            onPressed: () => _run(services),
-            icon: const Icon(Symbols.play_arrow_rounded, size: 28, fill: 1),
-            label: Text(_p50.isEmpty ? 'Run the race' : 'Run again'),
-          ),
+          Text('Pick a payload, then run.', style: AppText.quiet(AppText.body)),
         if (_error != null) ...[
           const SizedBox(height: Space.s3),
           Text(_error!, style: AppText.small.copyWith(color: Palette.channel)),
@@ -201,6 +207,8 @@ class _RaceScreenState extends State<RaceScreen> {
   }
 }
 
+/// One payload size: the number big, the unit small beneath it, so five fit in
+/// a row on a phone.
 class _SizeChip extends StatelessWidget {
   const _SizeChip({
     required this.bytes,
@@ -215,10 +223,14 @@ class _SizeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = formatBytes(bytes);
+    final i = label.indexOf(' ');
+    final number = label.substring(0, i);
+    final unit = label.substring(i + 1);
+    final enabled = onTap != null || selected;
     return Semantics(
       button: true,
       selected: selected,
-      enabled: onTap != null || selected,
+      enabled: enabled,
       label: 'Payload $label',
       excludeSemantics: true,
       child: Material(
@@ -233,17 +245,28 @@ class _SizeChip extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(Radii.medium),
           onTap: onTap,
-          child: Container(
-            constraints: const BoxConstraints(minWidth: 64, minHeight: 48),
-            padding: const EdgeInsets.symmetric(horizontal: Space.s4),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              style: selected
-                  ? AppText.monoBodyStrong
-                  : AppText.monoBody.copyWith(
-                      color: onTap == null ? Palette.quiet : Palette.ink,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 64),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    number,
+                    style:
+                        (selected ? AppText.monoBodyStrong : AppText.monoBody)
+                            .copyWith(
+                              color: enabled ? Palette.ink : Palette.quiet,
+                            ),
+                  ),
+                  Text(
+                    unit,
+                    style: AppText.monoSmall.copyWith(
+                      color: enabled ? Palette.quietText : Palette.quiet,
                     ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

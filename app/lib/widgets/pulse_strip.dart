@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -26,7 +25,7 @@ class PulseStrip extends StatefulWidget {
     required this.frameTimes,
     required this.jankCount,
     this.budgetMs = 16.7,
-    this.height = 128,
+    this.height = 160,
   });
 
   final ValueListenable<List<double>> frameTimes;
@@ -115,7 +114,7 @@ class _PulseStripState extends State<PulseStrip>
                       ),
                     ),
                     SizedBox(
-                      width: 124,
+                      width: 136,
                       child: Padding(
                         padding: const EdgeInsets.only(
                           left: Space.s3,
