@@ -272,3 +272,35 @@ FFI_PLUGIN_EXPORT void ffb_demo_cancel(int64_t stream_id) {
   pthread_mutex_unlock(&g_lock);
 }
 #endif  // !_WIN32
+
+// ---------------------------------------------------------------- JNI
+// The channel handlers in packages/channel_bridge call ffb_checksum too, so a
+// race measures only the bridge and never Kotlin against C. These two entry
+// points are what the `external fun`s in channel_bridge's Checksum.kt bind
+// to (file class ChecksumKt). Neither copies: one pins the Java byte array,
+// the other reads a direct ByteBuffer in place.
+#ifdef __ANDROID__
+#include <jni.h>
+
+JNIEXPORT jint JNICALL
+Java_com_keepdeploying_channel_1bridge_ChecksumKt_nativeChecksum(
+    JNIEnv* env, jclass cls, jbyteArray bytes, jint offset, jint length) {
+  (void)cls;
+  if (length <= 0) return 0;
+  uint8_t* data = (uint8_t*)(*env)->GetPrimitiveArrayCritical(env, bytes, NULL);
+  if (data == NULL) return 0;  // an OutOfMemoryError is pending in Java
+  uint32_t sum = ffb_checksum(data + offset, (size_t)length);
+  (*env)->ReleasePrimitiveArrayCritical(env, bytes, data, JNI_ABORT);
+  return (jint)sum;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_keepdeploying_channel_1bridge_ChecksumKt_nativeChecksumDirect(
+    JNIEnv* env, jclass cls, jobject buffer, jint offset, jint length) {
+  (void)cls;
+  if (length <= 0) return 0;
+  uint8_t* data = (uint8_t*)(*env)->GetDirectBufferAddress(env, buffer);
+  if (data == NULL) return 0;
+  return (jint)ffb_checksum(data + offset, (size_t)length);
+}
+#endif  // __ANDROID__

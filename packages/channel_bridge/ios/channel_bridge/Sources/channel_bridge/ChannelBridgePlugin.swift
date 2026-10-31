@@ -36,6 +36,9 @@ public final class ChannelBridgePlugin: NSObject, FlutterPlugin {
   private var classifier: Classifier?
   private var runtime: TfLiteAPI?
 
+  /// Owns the EventChannel for streamed llama.cpp tokens.
+  let llama = LlamaChannel()
+
   init(registrar: FlutterPluginRegistrar) {
     self.registrar = registrar
     super.init()
@@ -45,7 +48,8 @@ public final class ChannelBridgePlugin: NSObject, FlutterPlugin {
     let messenger = registrar.messenger()
 
     let method = FlutterMethodChannel(name: methodChannelName, binaryMessenger: messenger)
-    registrar.addMethodCallDelegate(ChannelBridgePlugin(registrar: registrar), channel: method)
+    let plugin = ChannelBridgePlugin(registrar: registrar)
+    registrar.addMethodCallDelegate(plugin, channel: method)
 
     let binary = FlutterBasicMessageChannel(
       name: binaryChannelName,
@@ -60,6 +64,8 @@ public final class ChannelBridgePlugin: NSObject, FlutterPlugin {
       var littleEndian = sum.littleEndian
       reply(Data(bytes: &littleEndian, count: MemoryLayout<UInt32>.size))
     }
+
+    plugin.llama.register(with: messenger)
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -203,14 +209,34 @@ public final class ChannelBridgePlugin: NSObject, FlutterPlugin {
   }
 }
 
-/// The byte sum modulo 2^32, the same as `checksum()` in Dart and Kotlin.
-/// `&+` wraps on overflow, which is exactly the modulo.
-func byteSum(_ data: Data) -> UInt32 {
-  var sum: UInt32 = 0
-  data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
-    for byte in bytes {
-      sum = sum &+ UInt32(byte)
-    }
+/// `ffb_checksum` from packages/ffi_bridge/src/ffi_bridge.c, the same C
+/// function the FFI bridges call, so a race measures only the bridge and never
+/// Swift against C. The ffi_bridge build hook ships it as
+/// Frameworks/ffi_bridge.framework; Dart loads that framework on first use, so
+/// if the channel runs first, load it here.
+private typealias CChecksum = @convention(c) (UnsafePointer<UInt8>?, Int) -> UInt32
+private let cChecksum: CChecksum? = {
+  if processSymbolLookup("ffb_checksum") == nil, let dir = Bundle.main.privateFrameworksPath {
+    _ = dlopen(dir + "/ffi_bridge.framework/ffi_bridge", RTLD_NOW | RTLD_GLOBAL)
   }
-  return sum
+  guard let symbol = processSymbolLookup("ffb_checksum") else {
+    NSLog("channel_bridge: ffb_checksum not found, using the Swift sum (the race is then not like for like)")
+    return nil
+  }
+  return unsafeBitCast(symbol, to: CChecksum.self)
+}()
+
+/// The byte sum modulo 2^32, computed by `ffb_checksum` in C. The Swift loop
+/// is only a fallback; `&+` wraps on overflow, which is exactly the modulo.
+func byteSum(_ data: Data) -> UInt32 {
+  data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) -> UInt32 in
+    if let sum = cChecksum {
+      return sum(bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count)
+    }
+    var total: UInt32 = 0
+    for byte in bytes {
+      total = total &+ UInt32(byte)
+    }
+    return total
+  }
 }

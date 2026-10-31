@@ -4,13 +4,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../app_services.dart' show JankMonitor;
 import '../theme/theme.dart';
 import '../theme/tokens.dart';
 
 /// The one memorable element: a live strip that draws one thin tick per frame,
-/// its height the frame time, against a dashed 16.7 ms budget line. Ticks over
-/// budget turn channel red; the strip scrolls left. The jank counter sits at the
-/// right end in large figures.
+/// its height the frame time, against a dashed budget line. Ticks over budget
+/// are drawn in the channel colour; the strip scrolls left. The right end
+/// shows how many janky frames landed in the last second.
+///
+/// Tap the counter to open the Jank log sheet, which lists every janky frame
+/// since the current screen opened (with a Clear button).
 ///
 /// It must not cause the jank it measures, so painting is two `drawRawPoints`
 /// calls for the ticks and one for the dashes, with buffers reused between
@@ -23,15 +27,21 @@ class PulseStrip extends StatefulWidget {
   const PulseStrip({
     super.key,
     required this.frameTimes,
-    required this.jankCount,
-    this.budgetMs = 16.7,
-    this.height = 160,
+    required this.jank,
+    this.height = 72,
+    this.onCounterTap,
   });
 
   final ValueListenable<List<double>> frameTimes;
-  final ValueListenable<int> jankCount;
-  final double budgetMs;
+
+  /// Source of truth for the budget, the rolling rate, and the log.
+  final JankMonitor jank;
+
   final double height;
+
+  /// Fired when the janky-frames counter is tapped. If null, the counter
+  /// renders without a tap affordance.
+  final VoidCallback? onCounterTap;
 
   @override
   State<PulseStrip> createState() => _PulseStripState();
@@ -55,7 +65,7 @@ class _PulseStripState extends State<PulseStrip>
   @override
   void initState() {
     super.initState();
-    _painter = _PulsePainter(widget.frameTimes, widget.budgetMs, _bump);
+    _painter = _PulsePainter(widget.frameTimes, widget.jank.budgetMs, _bump);
     _ticker = createTicker((_) => _bump.bump());
   }
 
@@ -63,9 +73,9 @@ class _PulseStripState extends State<PulseStrip>
   void didUpdateWidget(PulseStrip old) {
     super.didUpdateWidget(old);
     if (old.frameTimes != widget.frameTimes ||
-        old.budgetMs != widget.budgetMs) {
+        old.jank.budgetMs != widget.jank.budgetMs) {
       _painter.dispose();
-      _painter = _PulsePainter(widget.frameTimes, widget.budgetMs, _bump);
+      _painter = _PulsePainter(widget.frameTimes, widget.jank.budgetMs, _bump);
     }
   }
 
@@ -88,16 +98,18 @@ class _PulseStripState extends State<PulseStrip>
     }
     return RepaintBoundary(
       child: ValueListenableBuilder<int>(
-        valueListenable: widget.jankCount,
-        builder: (context, jank, _) => Semantics(
+        valueListenable: widget.jank.jankPerSecond,
+        builder: (context, rate, _) => Semantics(
           container: true,
           label: 'Frame pulse strip',
-          value: jank == 1 ? '1 janky frame' : '$jank janky frames',
+          value: rate == 1
+              ? '1 janky frame in the last second'
+              : '$rate janky frames in the last second',
           child: ExcludeSemantics(
             child: SizedBox(
               height: widget.height,
               child: DecoratedBox(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   border: Border(bottom: BorderSide(color: Palette.line)),
                 ),
                 child: Row(
@@ -113,42 +125,70 @@ class _PulseStripState extends State<PulseStrip>
                         ),
                       ),
                     ),
-                    SizedBox(
-                      width: 136,
-                      child: Padding(
-                        padding: const EdgeInsets.only(
-                          left: Space.s3,
-                          right: Space.gutter,
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                '$jank',
-                                style: AppText.monoDisplay.copyWith(
-                                  color: jank > 0
-                                      ? Palette.channel
-                                      : Palette.ink,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              jank == 1 ? 'janky frame' : 'janky frames',
-                              style: AppText.quiet(AppText.small),
-                              maxLines: 1,
-                            ),
-                          ],
-                        ),
-                      ),
+                    _JankCounter(
+                      rate: rate,
+                      onTap: widget.onCounterTap,
                     ),
                   ],
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Right-end counter: the rolling rate above a "/s" caption. Tappable when a
+/// handler is provided (the Jank log sheet is the point of entry).
+class _JankCounter extends StatelessWidget {
+  const _JankCounter({required this.rate, this.onTap});
+
+  final int rate;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final counter = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Space.s3),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            '$rate',
+            style: AppText.monoHeading.copyWith(
+              color: rate > 0 ? Palette.channel : Palette.ink,
+            ),
+          ),
+          Text(
+            'janky / s',
+            style: AppText.quiet(AppText.small),
+            maxLines: 1,
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) {
+      return SizedBox(
+        width: 96,
+        child: Padding(
+          padding: const EdgeInsets.only(right: Space.s3),
+          child: counter,
+        ),
+      );
+    }
+    return SizedBox(
+      width: 96,
+      child: Padding(
+        padding: const EdgeInsets.only(right: Space.s3),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(Radii.small),
+            child: counter,
           ),
         ),
       ),
@@ -183,8 +223,9 @@ class _PulsePainter extends CustomPainter {
   double _dashWidth = -1;
   double _dashY = -1;
 
+  // Paints are reused across frames; their colours are reassigned at the top
+  // of [paint] so a theme-mode flip picks up the new neutral.
   final Paint _okPaint = Paint()
-    ..color = Palette.ink
     ..strokeWidth = _tickWidth
     ..strokeCap = StrokeCap.butt;
   final Paint _badPaint = Paint()
@@ -195,22 +236,23 @@ class _PulsePainter extends CustomPainter {
     ..color = Palette.budget
     ..strokeWidth = 2
     ..strokeCap = StrokeCap.butt;
-  final Paint _basePaint = Paint()
-    ..color = Palette.line
-    ..strokeWidth = 1;
-  final Paint _chipPaint = Paint()..color = Palette.paper;
+  final Paint _basePaint = Paint()..strokeWidth = 1;
+  final Paint _chipPaint = Paint();
 
   // Sweep mode state: a fixed ring of slots and the write head.
   List<double> _slots = const [];
   int _head = 0;
 
-  late final TextPainter _label = TextPainter(
+  TextPainter _buildLabel() => TextPainter(
     text: TextSpan(
       text: '${budgetMs.toStringAsFixed(1)} ms',
       style: AppText.monoSmall.copyWith(color: Palette.quietText),
     ),
     textDirection: TextDirection.ltr,
   )..layout();
+
+  late TextPainter _label = _buildLabel();
+  Color? _labelColor;
 
   void _onFrame() {
     if (!reducedMotion) return;
@@ -227,6 +269,18 @@ class _PulsePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Pick up the current neutral colours each paint. The strong colours
+    // (channel, budget) stay constant and are set once in the field.
+    _okPaint.color = Palette.ink;
+    _basePaint.color = Palette.line;
+    _chipPaint.color = Palette.paper;
+    final labelColor = Palette.quietText;
+    if (_labelColor != labelColor) {
+      _label.dispose();
+      _label = _buildLabel();
+      _labelColor = labelColor;
+    }
+
     final plotH = size.height - _topPad - _bottomPad;
     final baseY = size.height - _bottomPad;
     final cap = (size.width / _pitch).floor();

@@ -104,7 +104,7 @@ say "  using ${FLUTTER_CMD[*]} (${FLUTTER_SOURCE})"
 if [ "$have" = "$WANT_FLUTTER" ]; then
   ok "Flutter ${have}"
 else
-  warn "Flutter ${have} found, this repo is checked with ${WANT_FLUTTER} (.fvmrc). With fvm: fvm install ${WANT_FLUTTER}. Numbers from another version are labelled with that version, but the steps are only checked with ${WANT_FLUTTER}."
+  warn "Flutter ${have} found, this repo is checked with ${WANT_FLUTTER} (.fvmrc). With fvm: fvm install ${WANT_FLUTTER}. Numbers from another version are labelled with that version, but the app is only checked with ${WANT_FLUTTER}."
 fi
 if [ -f "${ROOT}/.fvmrc" ] && ! command -v fvm >/dev/null 2>&1 && [ -z "${FLUTTER:-}" ]; then
   note "fvm is not installed, so the flutter on your PATH is used. fvm pins the version for you: https://fvm.app"
@@ -334,6 +334,15 @@ say "  Running flutter_launcher_icons to generate the Android adaptive icon and 
 say "  asset catalogue from assets/icon/ (reads flutter_launcher_icons.yaml)."
 (cd "$APP_DIR" && "${DART_CMD[@]}" run flutter_launcher_icons -f flutter_launcher_icons.yaml)
 
+step "Bundled small model (SmolLM2 135M, 105 MB, into app/assets/models/)"
+# Not in Git (too big for GitHub). Without it the app still builds, but the
+# SmolLM2 option on "Generate text" has nothing to load.
+if "${ROOT}/scripts/fetch-models.sh" --slm; then
+  ok "SmolLM2 is in app/assets/models/"
+else
+  warn "Could not download SmolLM2. Run scripts/fetch-models.sh --slm later."
+fi
+
 # ---------------------------------------------------------------- 5. next steps
 
 step "Done (${WARNINGS} warning(s) above)"
@@ -346,7 +355,7 @@ Next:
        iPhone:  open app/ios/Runner.xcworkspace in Xcode once and pick your
                 signing team under Runner, Signing & Capabilities.
   2. Try the app:        cd app && ${FLUTTER_CMD[*]} run --profile
-  3. The LLM model:      scripts/fetch-models.sh --push     (Android)
+  3. The bigger LLM:     scripts/fetch-models.sh --push     (Android, Qwen2.5)
                          scripts/fetch-models.sh            (then Finder, iPhone)
   4. The benchmark:      scripts/bench-android.sh   or   scripts/bench-ios.sh
 

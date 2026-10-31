@@ -40,8 +40,9 @@ void main() {
     final bridges = createPayloadBridges();
     final native = NativePreprocessorAdapter();
     final generators = <TokenGenerator>[
-      DemoGeneratorAdapter(),
+      BundledSmolGeneratorAdapter(),
       LlamaGeneratorAdapter(),
+      ChannelLlamaGeneratorAdapter(),
     ];
     final host = RealBenchmark(
       payloadBridges: bridges,

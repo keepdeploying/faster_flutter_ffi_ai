@@ -25,7 +25,41 @@ class FrameSummary {
   final double budgetMs;
 }
 
-class FrameMeter {
+/// One janky frame, as recorded by [FrameMeter] for the on-screen log.
+class JankEntry {
+  const JankEntry({required this.atMs, required this.durationMs});
+
+  /// Milliseconds since the meter was created, so entries sort naturally and
+  /// are stable across reset+clear cycles (which only touch the log, not the
+  /// clock).
+  final int atMs;
+
+  /// How long that frame actually took, in ms.
+  final double durationMs;
+}
+
+/// A read-only view onto the pulse-strip jank data. [FrameMeter] implements it;
+/// tests can hand a fake to [AppServices].
+abstract interface class JankMonitor {
+  /// Janky frames observed in the last second.
+  ValueListenable<int> get jankPerSecond;
+
+  /// Bumps whenever a janky frame joins the log, so a watching sheet can
+  /// rebuild without listening to a growing list.
+  ValueListenable<int> get jankLogVersion;
+
+  /// Frame budget in ms (one frame at the display's refresh rate).
+  double get budgetMs;
+
+  /// Snapshot of every janky frame seen since the last [clearJankLog] or
+  /// meter reset.
+  List<JankEntry> get jankLog;
+
+  /// Empties the log. The rolling [jankPerSecond] is unaffected.
+  void clearJankLog();
+}
+
+class FrameMeter implements JankMonitor {
   /// [windowSize] is how many recent frames the pulse strip can draw.
   /// [budgetMs] fixes the budget (tests); by default it follows the display.
   FrameMeter({this.windowSize = 120, double? budgetMs})
@@ -58,6 +92,16 @@ class FrameMeter {
   );
   final ValueNotifier<int> _jankCount = ValueNotifier<int>(0);
 
+  /// Timestamps and durations of each janky frame seen since the last [reset].
+  /// Rolling counter uses this; the log sheet reads it. Grows while recording;
+  /// bounded by [_logCap] to avoid unbounded memory on a stuck screen.
+  final List<JankEntry> _log = <JankEntry>[];
+  final ValueNotifier<int> _logVersion = ValueNotifier<int>(0);
+  final ValueNotifier<int> _jankPerSecond = ValueNotifier<int>(0);
+  static const int _logCap = 1000;
+  static const Duration _rateWindow = Duration(seconds: 1);
+  final Stopwatch _clock = Stopwatch()..start();
+
   int _frames = 0;
   int _janky = 0;
   double _worst = 0;
@@ -70,10 +114,34 @@ class FrameMeter {
   /// published per batch of frames, so listeners can keep the old one.
   ValueListenable<List<double>> get recent => _recent;
 
-  /// Janky frames since the last [reset].
+  /// Janky frames since the last [reset]. Still exposed for the benchmark
+  /// suite; the pulse strip reads [jankPerSecond] instead.
   ValueListenable<int> get jankCount => _jankCount;
 
+  /// Janky frames observed in the last second. The pulse strip's counter.
+  @override
+  ValueListenable<int> get jankPerSecond => _jankPerSecond;
+
+  /// Increments every time a janky frame is appended to the log, so a sheet
+  /// can rebuild without exposing the list as a listenable.
+  @override
+  ValueListenable<int> get jankLogVersion => _logVersion;
+
+  /// A snapshot of the janky frames seen since the last [reset] or
+  /// [clearJankLog]. Returns an unmodifiable view.
+  @override
+  List<JankEntry> get jankLog => List<JankEntry>.unmodifiable(_log);
+
+  /// Clears the jank log without touching other counters. The pulse strip's
+  /// rolling rate stays accurate because it is recomputed from a parallel ring.
+  @override
+  void clearJankLog() {
+    _log.clear();
+    _logVersion.value = _logVersion.value + 1;
+  }
+
   /// Frame budget in ms: janky means longer than this.
+  @override
   double get budgetMs => _budgetMs;
 
   bool get isRunning => _running;
@@ -150,7 +218,12 @@ class FrameMeter {
 
   void _add(double ms) {
     _frames++;
-    if (ms > _budgetMs) _janky++;
+    if (ms > _budgetMs) {
+      _janky++;
+      final at = _clock.elapsedMilliseconds;
+      _log.add(JankEntry(atMs: at, durationMs: ms));
+      if (_log.length > _logCap) _log.removeAt(0);
+    }
     if (ms > _worst) _worst = ms;
     _window.add(ms);
     if (_window.length > windowSize) {
@@ -158,9 +231,27 @@ class FrameMeter {
     }
   }
 
+  /// Counts how many entries in [_log] are within the last [_rateWindow].
+  int _rollingJankCount() {
+    final cutoff = _clock.elapsedMilliseconds - _rateWindow.inMilliseconds;
+    // Entries are appended in time order, so a reverse scan short-circuits
+    // early even on a long log.
+    var n = 0;
+    for (var i = _log.length - 1; i >= 0; i--) {
+      if (_log[i].atMs < cutoff) break;
+      n++;
+    }
+    return n;
+  }
+
   void _publish() {
     if (_disposed) return;
     _recent.value = List<double>.unmodifiable(_window);
     _jankCount.value = _janky;
+    _jankPerSecond.value = _rollingJankCount();
+    // Only bump the log version when a new entry landed since last publish.
+    // _logVersion is read by the Jank-log sheet; the pulse strip itself only
+    // listens to [_jankPerSecond], so bumping on every batch is cheap.
+    _logVersion.value = _log.length;
   }
 }

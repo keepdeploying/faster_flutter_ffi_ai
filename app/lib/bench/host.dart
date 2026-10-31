@@ -251,9 +251,15 @@ class RealBenchmark implements ui.BenchmarkHost {
     for (final g in generators) {
       try {
         await g.load();
-      } on Object {
-        // The LLM model is optional for a benchmark run (docs/LLM.md).
-        if (g.isRealModel) continue;
+      } on Object catch (e, st) {
+        // The LLM model is optional for a benchmark run (docs/LLM.md). Still,
+        // print the error so a missing-looking row has a visible reason in the
+        // flutter drive log instead of silently vanishing.
+        if (g.isRealModel) {
+          // ignore: avoid_print
+          print('FFB_GENERATOR_LOAD_FAILED ${g.label}: $e\n$st');
+          continue;
+        }
         rethrow;
       }
       final r = await _runner.generate(

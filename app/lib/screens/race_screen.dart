@@ -38,6 +38,7 @@ class _RaceScreenState extends State<RaceScreen> {
   bool _stop = false;
   String? _error;
   final Map<BridgeKind, double> _p50 = {};
+  final Set<BridgeKind> _selected = {...BridgeKind.values};
 
   // Fewer samples for big payloads, so the race ends in a few seconds.
   static int _runsFor(int bytes) => bytes >= 8000000
@@ -62,7 +63,10 @@ class _RaceScreenState extends State<RaceScreen> {
       payload[i] = (i * 31) & 0xFF;
     }
     final expected = checksum(payload);
-    final bridges = services.payloadBridges;
+    final bridges = [
+      for (final b in services.payloadBridges)
+        if (_selected.contains(b.kind)) b,
+    ];
     final samples = {for (final b in bridges) b.kind: <double>[]};
     final clock = services.nowMicros;
     final runs = _runsFor(bytes);
@@ -159,6 +163,23 @@ class _RaceScreenState extends State<RaceScreen> {
           style: AppText.quiet(AppText.small),
         ),
         const SizedBox(height: Space.s3),
+        Wrap(
+          spacing: Space.s2,
+          runSpacing: Space.s2,
+          children: [
+            for (final k in kinds)
+              _BridgeChip(
+                kind: k,
+                selected: _selected.contains(k),
+                onTap: _running
+                    ? null
+                    : () => setState(() {
+                        if (!_selected.add(k)) _selected.remove(k);
+                      }),
+              ),
+          ],
+        ),
+        const SizedBox(height: Space.s3),
         Row(
           children: [
             Expanded(child: BigNumber(value: heroValue, hero: true)),
@@ -171,13 +192,18 @@ class _RaceScreenState extends State<RaceScreen> {
               )
             else
               FilledButton.icon(
-                onPressed: () => _run(services),
+                onPressed: _selected.isEmpty ? null : () => _run(services),
                 icon: const Icon(Symbols.play_arrow_rounded, size: 28, fill: 1),
                 label: const Text('Run'),
               ),
           ],
         ),
-        if (caption != null)
+        if (_selected.isEmpty)
+          Text(
+            'Pick at least one bridge.',
+            style: AppText.quiet(AppText.body),
+          )
+        else if (caption != null)
           Text(caption, style: AppText.quiet(AppText.body))
         else
           Text('Pick a payload, then run.', style: AppText.quiet(AppText.body)),
@@ -267,6 +293,73 @@ class _SizeChip extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A compact bridge toggle: when selected the chip wears the bridge's colour as
+/// an outline and tint; when not, it stays plain. Disabled while a race runs.
+class _BridgeChip extends StatelessWidget {
+  const _BridgeChip({
+    required this.kind,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final BridgeKind kind;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = BridgeStyle.of(kind);
+    final enabled = onTap != null;
+    final borderColor = selected ? style.color : Palette.line;
+    final fillColor = selected ? style.tint : Colors.transparent;
+    final iconColor = selected
+        ? style.color
+        : (enabled ? Palette.quietText : Palette.quiet);
+    final textColor = enabled ? Palette.ink : Palette.quiet;
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: enabled,
+      label: style.longLabel,
+      excludeSemantics: true,
+      child: Material(
+        color: fillColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Radii.medium),
+          side: BorderSide(
+            color: borderColor,
+            width: selected ? 2 : 1.5,
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(Radii.medium),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Space.s3,
+              vertical: Space.s2,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(style.icon, size: 18, color: iconColor),
+                const SizedBox(width: Space.s2),
+                Text(
+                  style.label,
+                  style: AppText.small.copyWith(
+                    color: textColor,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

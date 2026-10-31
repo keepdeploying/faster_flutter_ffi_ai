@@ -36,8 +36,6 @@ app.*.map.json
 
 # All target platforms, so the repository holds only the Dart code.
 # `flutter create .` generates them again in seconds, with no download
-# (see ../README.md). Because they are ignored, they survive every
-# `git checkout step-NN`, so attendees generate them once.
 android/
 ios/
 web/

@@ -5,10 +5,13 @@ import java.nio.ByteOrder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Pure JVM tests for the checksum and the resize. Run with `./gradlew testDebugUnitTest`. */
+/** JVM tests for the checksum (when libffi_bridge.so can load) and the resize. Run with `./gradlew testDebugUnitTest`. */
 internal class NativeMathTest {
     @Test
     fun checksumIsTheByteSumModulo2Pow32() {
+        // checksum() runs ffb_checksum from libffi_bridge.so, which only exists
+        // inside the app. On a plain JVM there is nothing to test here.
+        if (!nativeChecksumLoaded) return
         assertEquals(0L, checksum(ByteArray(0)))
         assertEquals(255L * 3, checksum(byteArrayOf(-1, -1, -1)))
         // 20 million bytes of 0xFF is 5,100,000,000, which wraps once past 2^32.
@@ -18,6 +21,7 @@ internal class NativeMathTest {
 
     @Test
     fun bufferChecksumMatchesAndKeepsPosition() {
+        if (!nativeChecksumLoaded) return
         val bytes = ByteArray(1000) { (it * 31 + 7).toByte() }
         val buffer = ByteBuffer.allocateDirect(bytes.size).put(bytes)
         buffer.rewind()

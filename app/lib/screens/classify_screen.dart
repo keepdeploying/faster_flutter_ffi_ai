@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../app_services.dart';
 import '../bridges/bridge.dart';
@@ -35,6 +36,10 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
   int _generation = 0;
   AppServices? _services;
 
+  /// Starts paused: the user picks a bridge and site, then taps Play. Switching
+  /// either toggle pauses again so a change is deliberate.
+  bool _playing = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -44,15 +49,29 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
       final kinds = _kinds(services);
       _kind = kinds.isEmpty ? null : kinds.first;
       _select();
-      _sub = services.frames().listen(_onFrame);
     }
   }
 
   List<BridgeKind> _kinds(AppServices s) =>
       (s.classifiers.keys.toList()..sort((a, b) => a.index - b.index));
 
+  /// Starts the frame subscription if playing; cancels it otherwise. Called
+  /// from the Play/Pause button and from [_select].
+  void _applyPlaying() {
+    final s = _services;
+    if (s == null) return;
+    if (_playing && _sub == null) {
+      _sub = s.frames().listen(_onFrame);
+    } else if (!_playing && _sub != null) {
+      _sub!.cancel();
+      _sub = null;
+      _busy = false;
+    }
+  }
+
   /// Picks the classifier for the current bridge and site. Anything built per
-  /// site is ours to dispose; the shared ones in the map are not.
+  /// site is ours to dispose; the shared ones in the map are not. Also pauses
+  /// the stream so the user re-presses Play after the choice.
   void _select() {
     final s = _services!;
     final kind = _kind;
@@ -60,6 +79,8 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
     _generation++;
     _result = null;
     _error = null;
+    _playing = false;
+    _applyPlaying();
     if (kind == null) {
       _classifier = null;
       _ownsClassifier = false;
@@ -130,6 +151,16 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
     return ScreenFrame(
       title: 'Classify frames',
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: Space.s4),
+          child: Text(
+            'The same classifier (MobileNet V1, a small image model from '
+            '2017, bundled in the app) runs behind each bridge, on the same '
+            'frames. The split bar shows preprocess + inference + bridge; '
+            'the bridge part is what differs.',
+            style: AppText.quiet(AppText.body),
+          ),
+        ),
         if (kinds.isEmpty)
           Text(
             'No classifier is available. Build the app with a model in assets/models.',
@@ -156,6 +187,36 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                     _site = s;
                     _select();
                   }),
+          ),
+          const SizedBox(height: Space.s3),
+          Row(
+            children: [
+              Expanded(
+                child: _playing
+                    ? OutlinedButton.icon(
+                        onPressed: () => setState(() {
+                          _playing = false;
+                          _applyPlaying();
+                        }),
+                        icon: const Icon(Symbols.pause_rounded, size: 24),
+                        label: const Text('Pause'),
+                      )
+                    : FilledButton.icon(
+                        onPressed: _classifier == null
+                            ? null
+                            : () => setState(() {
+                                _playing = true;
+                                _applyPlaying();
+                              }),
+                        icon: const Icon(
+                          Symbols.play_arrow_rounded,
+                          size: 24,
+                          fill: 1,
+                        ),
+                        label: const Text('Classify frames'),
+                      ),
+              ),
+            ],
           ),
           const SizedBox(height: Space.s5),
           Row(

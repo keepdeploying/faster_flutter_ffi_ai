@@ -42,8 +42,9 @@ class _RealServicesState extends State<RealServices>
     BridgeKind.ffiCopy: LiteRtIsolateClassifier(),
   };
   late final List<TokenGenerator> _generators = [
-    DemoGeneratorAdapter(),
+    BundledSmolGeneratorAdapter(),
     LlamaGeneratorAdapter(),
+    ChannelLlamaGeneratorAdapter(),
   ];
   late final RealBenchmark _benchmark = RealBenchmark(
     payloadBridges: _bridges,
@@ -107,6 +108,8 @@ class _RealServicesState extends State<RealServices>
     generators: _generators,
     frameTimes: _meter.recent,
     jankCount: _meter.jankCount,
+    jank: _meter,
+    generatorAt: defaultGeneratorAt,
     frames: BundledFrames.loop,
     benchmark: _benchmark,
     classifierAt: classifierAt,

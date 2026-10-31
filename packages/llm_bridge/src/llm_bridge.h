@@ -102,6 +102,25 @@ LLB_EXPORT void llb_last_stats(llb_model* model, llb_stats* out);
 // Frees a string handed to the callback.
 LLB_EXPORT void llb_free_string(char* s);
 
+// Pull-model entry points. Platform channels on Kotlin and Swift want a
+// blocking "give me the next token" call rather than a Dart NativeCallable
+// posting events to an isolate. The pair below adds that shape without
+// touching the callback path above; the two can coexist, but a given
+// generation uses one shape or the other.
+//
+// Starts a generation whose tokens land in an internal queue instead of a
+// Dart callback. Returns a stream id (> 0) on success or a negative error
+// code with the same meaning as llb_generate.
+LLB_EXPORT int64_t llb_prompt_pull(llb_model* model, const char* prompt,
+                                   int32_t max_tokens, float temperature,
+                                   uint32_t seed);
+
+// Pulls the next generated token for stream `stream_id` as a null-terminated
+// UTF-8 string whose storage belongs to the library; the caller must copy
+// before the next pull. Blocks until a token is available. Returns NULL when
+// the stream has finished (either naturally or after llb_cancel).
+LLB_EXPORT const char* llb_pull_next_token(int64_t stream_id);
+
 #ifdef __cplusplus
 }
 #endif

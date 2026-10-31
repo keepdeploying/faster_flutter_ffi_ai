@@ -5,7 +5,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import 'bench/frame_meter.dart' show JankMonitor;
 import 'bridges/bridge.dart';
+import 'bridges/generator_adapters.dart' show GeneratorAt;
+
+export 'bench/frame_meter.dart' show JankEntry, JankMonitor;
+export 'bridges/generator_adapters.dart'
+    show GenerateBridge, GenerateModel, GeneratorAt;
 
 /// Where frames for the classifier come from: bundled frames on a loop, or a
 /// live camera. Each call starts a new stream; cancel the subscription to stop.
@@ -87,9 +93,11 @@ class AppServices extends InheritedWidget {
     required this.generators,
     required this.frameTimes,
     required this.jankCount,
+    required this.jank,
     required this.frames,
     required this.benchmark,
     this.classifierAt,
+    this.generatorAt,
     this.nowMicros = _systemMicros,
     this.debugBuild = kDebugMode,
     required super.child,
@@ -104,12 +112,20 @@ class AppServices extends InheritedWidget {
   /// draws one tick per entry.
   final ValueListenable<List<double>> frameTimes;
 
-  /// Frames over budget since the meter started.
+  /// Cumulative count of frames over budget since the meter started. Kept for
+  /// tests and the benchmark; the pulse strip reads [jank] instead.
   final ValueListenable<int> jankCount;
+
+  /// Rolling jank rate and the per-frame log the pulse strip uses.
+  final JankMonitor jank;
 
   final FrameSource frames;
   final BenchmarkHost benchmark;
   final ClassifierAt? classifierAt;
+
+  /// Builds a [TokenGenerator] for a (model, bridge) pair. The Generate screen
+  /// uses it as a 2x2 chooser (SmolLM/Qwen x FFI/Channel).
+  final GeneratorAt? generatorAt;
   final MicrosClock nowMicros;
 
   /// True in debug mode. Measurement screens then show a banner and the
@@ -130,9 +146,11 @@ class AppServices extends InheritedWidget {
       generators != old.generators ||
       frameTimes != old.frameTimes ||
       jankCount != old.jankCount ||
+      jank != old.jank ||
       frames != old.frames ||
       benchmark != old.benchmark ||
       classifierAt != old.classifierAt ||
+      generatorAt != old.generatorAt ||
       nowMicros != old.nowMicros ||
       debugBuild != old.debugBuild;
 }

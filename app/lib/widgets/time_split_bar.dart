@@ -21,8 +21,10 @@ class TimeSplitBar extends StatelessWidget {
   final double inferenceUs;
   final Color bridgeColor;
 
-  static const _preprocessColor = Color(0x6B20344B); // ink 42%
-  static const _inferenceColor = Palette.ink;
+  // 42% alpha of the current ink. Kept subdued so the bridge segment reads as
+  // the headline part of the bar.
+  static Color get _preprocessColor => Palette.ink.withValues(alpha: 0.42);
+  static Color get _inferenceColor => Palette.ink;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +48,7 @@ class TimeSplitBar extends StatelessWidget {
               child: LayoutBuilder(
                 builder: (context, c) {
                   if (total <= 0) {
-                    return const ColoredBox(color: Palette.line);
+                    return ColoredBox(color: Palette.line);
                   }
                   // Keep a sliver of every non-zero part visible: the bridge
                   // share is often under 1% and is the whole point.

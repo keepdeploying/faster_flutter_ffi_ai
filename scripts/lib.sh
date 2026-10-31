@@ -10,7 +10,7 @@ RAW_DIR="${ROOT}/results/raw"
 
 # The Flutter version this repo is checked with: the one in .fvmrc.
 WANT_FLUTTER="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${ROOT}/.fvmrc" 2>/dev/null | head -1)"
-WANT_FLUTTER="${WANT_FLUTTER:-3.47.6}"
+WANT_FLUTTER="${WANT_FLUTTER:-3.47.7}"
 
 say() { printf '%s\n' "$*"; }
 step() { printf '\n== %s\n' "$*"; }
@@ -51,7 +51,7 @@ pick_flutter() {
   fi
 }
 
-# The version number `flutter --version` prints, for example 3.47.6.
+# The version number `flutter --version` prints, for example 3.47.7.
 # Its output is shown, not hidden: the first run of a new Flutter (or fvm asking
 # to install the pinned version) can take minutes or wait for an answer.
 flutter_version() {

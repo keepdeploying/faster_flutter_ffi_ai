@@ -12,20 +12,22 @@ class BigNumber extends StatelessWidget {
     required this.value,
     this.unit,
     this.caption,
-    this.color = Palette.ink,
+    this.color,
     this.hero = false,
   });
 
   final String value;
   final String? unit;
   final String? caption;
-  final Color color;
+
+  /// Defaults to the current [Palette.ink].
+  final Color? color;
   final bool hero;
 
   @override
   Widget build(BuildContext context) {
     final valueStyle = (hero ? AppText.monoHero : AppText.monoDisplay).copyWith(
-      color: color,
+      color: color ?? Palette.ink,
     );
     return Semantics(
       label: '${caption ?? ''} $value ${unit ?? ''}'.trim(),

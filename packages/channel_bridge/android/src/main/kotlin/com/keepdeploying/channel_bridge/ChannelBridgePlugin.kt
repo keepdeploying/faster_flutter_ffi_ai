@@ -43,6 +43,9 @@ class ChannelBridgePlugin : FlutterPlugin {
     @Volatile
     private var classifier: Classifier? = null
 
+    // Owns the EventChannel for streamed llama.cpp tokens.
+    private var llama: LlamaChannel? = null
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         appContext = binding.applicationContext
         assets = binding.flutterAssets
@@ -54,6 +57,7 @@ class ChannelBridgePlugin : FlutterPlugin {
         binaryChannel = BasicMessageChannel(binding.binaryMessenger, BINARY_CHANNEL, BinaryCodec.INSTANCE_DIRECT).also {
             it.setMessageHandler { message, reply -> reply.reply(checksumReply(message)) }
         }
+        llama = LlamaChannel().also { it.register(binding.binaryMessenger) }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -66,6 +70,8 @@ class ChannelBridgePlugin : FlutterPlugin {
         // The worker may still be inside classify(); closing waits for no one, so
         // let go of the reference and let the interpreter be collected with it.
         classifier = null
+        llama?.unregister()
+        llama = null
         appContext = null
         assets = null
     }

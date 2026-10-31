@@ -3,12 +3,17 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../app_services.dart';
 import '../theme/theme.dart';
+import '../theme/theme_mode.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_mark.dart';
+import '../widgets/jank_log_sheet.dart';
 import '../widgets/pulse_strip.dart';
+import '../widgets/settings_sheet.dart';
+import 'about_screen.dart';
 import 'benchmark_screen.dart';
 import 'classify_screen.dart';
 import 'generate_screen.dart';
+import 'model_screen.dart';
 import 'race_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -34,7 +39,8 @@ class HomeScreen extends StatelessWidget {
             bottom: false,
             child: PulseStrip(
               frameTimes: services.frameTimes,
-              jankCount: services.jankCount,
+              jank: services.jank,
+              onCounterTap: () => showJankLogSheet(context, services.jank),
             ),
           ),
           Expanded(
@@ -43,11 +49,16 @@ class HomeScreen extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
                   Space.gutter,
-                  Space.s5,
+                  Space.s3,
                   Space.gutter,
                   Space.s5,
                 ),
                 children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: _ThemeChip(),
+                  ),
+                  const SizedBox(height: Space.s2),
                   Row(
                     children: [
                       const AppMark(size: 48),
@@ -93,12 +104,73 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: Space.s5),
                   const _ColourKey(),
+                  const SizedBox(height: Space.s5),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => open(const AboutScreen()),
+                          icon: const Icon(Symbols.info_rounded, size: 20),
+                          label: const Text('About'),
+                        ),
+                      ),
+                      const SizedBox(width: Space.s3),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => open(const ModelScreen()),
+                          icon: const Icon(
+                            Symbols.cloud_download_rounded,
+                            size: 20,
+                          ),
+                          label: const Text('LLM model'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Text + icon chip that shows the current theme choice and opens the sheet
+/// on tap. Rebuilds when [appThemeMode] changes so the label stays accurate.
+class _ThemeChip extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: appThemeMode,
+      builder: (context, mode, _) {
+        final label = switch (mode) {
+          ThemeMode.system => 'Theme: System',
+          ThemeMode.light => 'Theme: Light',
+          ThemeMode.dark => 'Theme: Dark',
+        };
+        final icon = switch (mode) {
+          ThemeMode.system => Symbols.contrast_rounded,
+          ThemeMode.light => Symbols.light_mode_rounded,
+          ThemeMode.dark => Symbols.dark_mode_rounded,
+        };
+        return TextButton.icon(
+          onPressed: () => showSettingsSheet(context),
+          icon: Icon(icon, size: 18, color: Palette.quietText),
+          label: Text(label, style: AppText.quiet(AppText.small)),
+          style: TextButton.styleFrom(
+            foregroundColor: Palette.quietText,
+            padding: const EdgeInsets.symmetric(
+              horizontal: Space.s3,
+              vertical: Space.s1,
+            ),
+            visualDensity: VisualDensity.compact,
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        );
+      },
     );
   }
 }
@@ -129,9 +201,9 @@ class _HomeRow extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             border: Border(
-              top: const BorderSide(color: Palette.line),
+              top: BorderSide(color: Palette.line),
               bottom: last
-                  ? const BorderSide(color: Palette.line)
+                  ? BorderSide(color: Palette.line)
                   : BorderSide.none,
             ),
           ),
@@ -154,7 +226,7 @@ class _HomeRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: Space.s2),
-              const Icon(
+              Icon(
                 Symbols.arrow_forward_rounded,
                 size: 24,
                 color: Palette.quiet,

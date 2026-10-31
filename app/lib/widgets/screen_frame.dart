@@ -5,6 +5,7 @@ import '../app_services.dart';
 import '../theme/theme.dart';
 import '../theme/tokens.dart';
 import 'debug_banner.dart';
+import 'jank_log_sheet.dart';
 import 'pulse_strip.dart';
 
 /// The frame every screen shares: the pulse strip across the top, an optional
@@ -35,7 +36,8 @@ class ScreenFrame extends StatelessWidget {
     final services = AppServices.of(context);
     final strip = PulseStrip(
       frameTimes: services.frameTimes,
-      jankCount: services.jankCount,
+      jank: services.jank,
+      onCounterTap: () => showJankLogSheet(context, services.jank),
     );
     return Scaffold(
       body: Column(

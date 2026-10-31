@@ -192,7 +192,7 @@ class _SuiteRow extends StatelessWidget {
                 height: 4,
                 child: Stack(
                   children: [
-                    const Positioned.fill(
+                    Positioned.fill(
                       child: ColoredBox(color: Palette.line),
                     ),
                     FractionallySizedBox(
@@ -248,7 +248,7 @@ class _ResultRow extends StatelessWidget {
       excludeSemantics: true,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: Space.s2),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: Palette.line)),
         ),
         child: Row(

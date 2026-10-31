@@ -237,7 +237,8 @@ class NativePreprocessor implements Finalizable {
   );
 
   /// Resizes [rgba] (tightly packed RGBA8888, [width] x [height]) to
-  /// `size x size x 3` floats in [-1, 1]. The result is a fresh copy.
+  /// `size x size x 3` floats in [-1, 1]. The result is a fresh copy, owned
+  /// by the caller: safe to keep across later [preprocess] calls.
   Float32List preprocess(
     Uint8List rgba,
     int width,
@@ -245,7 +246,9 @@ class NativePreprocessor implements Finalizable {
     int size = 224,
   }) {
     _run(rgba, width, height, size);
-    return Float32List.fromList(_outView!.sublist(0, size * size * 3));
+    // One copy out of the reusable native buffer. The earlier shape used
+    // Float32List.fromList(sublist(...)), which copied twice.
+    return _outView!.sublist(0, size * size * 3);
   }
 
   /// Like [preprocess], but writes into [out] instead of returning a copy.

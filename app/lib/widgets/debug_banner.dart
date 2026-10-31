@@ -29,7 +29,7 @@ class DebugBanner extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Symbols.info_rounded, size: 20, color: Palette.ink),
+            Icon(Symbols.info_rounded, size: 20, color: Palette.ink),
             const SizedBox(width: Space.s2),
             Expanded(child: Text(message, style: AppText.small)),
           ],

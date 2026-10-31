@@ -12,7 +12,7 @@ import 'package:channel_bridge/channel_bridge.dart';
 
 final bridge = ChannelPayloadBridge(ChannelKind.binary);
 await bridge.warmUp(65536);
-final sum = await bridge.roundTrip(payload); // byte sum modulo 2^32, from Kotlin or Swift
+final sum = await bridge.roundTrip(payload); // byte sum modulo 2^32, by ffb_checksum in C
 bridge.dispose();
 
 final classifier = ChannelClassifier();
@@ -165,8 +165,10 @@ flutter test        # Dart tests with mocked channels
 The Kotlin and Swift code compiles only in a real Android or iOS build
 (`scripts/bench-android.sh`, `scripts/bench-ios.sh`). `ChannelBridgePlugin.swift`
 imports Flutter, so only that build checks it. `./gradlew testDebugUnitTest`
-in an app's `android/` directory runs the small Kotlin tests for the checksum and
-the resize.
+in an app's `android/` directory runs the small Kotlin tests for the resize. The
+checksum tests skip there: `checksum()` calls `ffb_checksum` from
+`libffi_bridge.so` through JNI, the same C function the FFI bridges call, and
+that library only exists inside the app.
 
 The Swift files that do not import Flutter (`Preprocess.swift`,
 `TfLiteRuntime.swift`, `Classifier.swift`) also build on Linux. With a Swift

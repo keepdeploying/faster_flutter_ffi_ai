@@ -12,7 +12,7 @@ only the bridge differs.**
 
 ```text
 faster_flutter_ffi/
-  .fvmrc                    Flutter 3.47.6, the version every step is checked with
+  .fvmrc                    Flutter 3.47.7, the version the repo is checked with
   README.md                 what the demo shows, the results, how to reproduce them
   app/                      the Flutter app (only Dart code and assets are committed)
     lib/main.dart
@@ -86,8 +86,11 @@ int64_t ffb_demo_generate(const char* prompt, int32_t max_tokens, int32_t delay_
 void ffb_demo_cancel(int64_t stream_id);
 ```
 
-Checksum = byte sum modulo 2^32, identical to `checksum()` in Dart, Kotlin and
-Swift. Every round trip asserts it.
+Checksum = byte sum modulo 2^32. Every bridge computes it with this same C
+function: the FFI bridges call it directly, and the channel handlers call it
+too (Kotlin through JNI, entry points at the end of `ffi_bridge.c`; Swift
+through `dlsym`). So the native work is identical and a race measures only the
+bridge. Dart's own `checksum()` is the reference every round trip asserts.
 
 ### Channel names
 
@@ -120,7 +123,7 @@ Native timings use the monotonic clock on each side (`System.nanoTime`,
   "schema": 1,
   "createdAt": "2026-10-14T10:00:00Z",
   "device": {"platform": "android", "model": "Pixel 8", "os": "16", "abi": "android_arm64"},
-  "flutter": "3.47.6",
+  "flutter": "3.47.7",
   "buildMode": "profile",
   "suites": [
     {"suite": "round_trip", "bridge": "ffiLeaf", "payloadBytes": 1024,
@@ -140,7 +143,7 @@ Native timings use the monotonic clock on each side (`System.nanoTime`,
 `device.abi` is `Abi.current().toString()` from `dart:ffi` (`android_arm64`,
 `ios_arm64`). `flutter` comes from `--dart-define=FFB_FLUTTER_VERSION=...` (the
 plain `FLUTTER_VERSION` is reserved by the framework); the bench scripts pass
-the version they detect, and the default is 3.47.6. In a
+the version they detect, and the default is 3.47.7. In a
 `classify` suite the stats object is named `overhead`, not `bridge` (the name
 `bridge` already holds the bridge's own name): it is the time that is neither
 preprocessing nor inference, which is the bridge.
@@ -223,25 +226,6 @@ Motion: only what answers an action, plus the pulse strip itself. Respect
 `MediaQuery.disableAnimations`. Every control has a semantics label; contrast
 of text on paper is at least 4.5:1.
 
-## Steps (Git tags)
-
-`main` always holds the finished app. The tags mark the stages of the talk, each a
-working app on one straight line, as in workshop-repo-template:
-
-| Tag | What the step adds |
-| --- | --- |
-| step-01 | App shell, theme, pulse strip, channel round trip (both channel kinds) |
-| step-02 | `ffi_bridge` package: C checksum through FFI with a copy |
-| step-03 | Leaf calls and zero-copy buffers; the bridge race screen complete |
-| step-04 | The classifier on both paths, C preprocessing |
-| step-05 | Off the UI thread: isolate and native thread; jank comparison |
-| step-06 | Token streaming: C demo generator, then the real LLM |
-| final | Benchmark screen, integration test, report tool, README results |
-
-Tags are created by the maintainer only after `check-steps.sh` passes.
-
-Git note: agents commit nothing.
-
 ## Code style
 
 - Comments explain why, in the talk's words, as in scrolling_flutter_vs_css:
@@ -252,14 +236,11 @@ Git note: agents commit nothing.
 
 ## Checking work
 
-Agents work in a Linux VM that has this folder mounted and Flutter 3.47.6 for
-Linux at `$HOME/tools/flutter/bin`. In that VM:
-
-- `scripts/check-all.sh` runs all of the following, plus the report tool's
-  tests and a syntax check of the scripts.
-- `flutter analyze` and `flutter test` for the app and each package.
-- `dart test` in `packages/ffi_bridge` runs the C code for real (Linux build
+- `scripts/check-all.sh` runs everything that does not need a phone: the
+  analyzer and tests for the app and each package, the report tool's tests, and
+  a syntax check of the scripts.
+- `dart test` in `packages/ffi_bridge` runs the C code for real (a desktop build
   through the build hook).
-- Android and iOS builds, and anything on a phone, run on the Mac itself, through
+- Android and iOS builds, and anything on a phone, go through
   `scripts/bench-android.sh` and `scripts/bench-ios.sh`. Kotlin and Swift code is
-  checked by those builds, so keep it small and plain.
+  only compiled by those builds, so keep it small and plain.

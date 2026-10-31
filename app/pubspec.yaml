@@ -31,6 +31,12 @@ dependencies:
   device_info_plus: ^13.3.0
   # Material Symbols Rounded, one icon per bridge kind (font bundled).
   material_symbols_icons: ^4.2960.0
+  # Persists the theme-mode choice across launches.
+  shared_preferences: ^2.3.0
+  # Downloads the full Qwen GGUF from Hugging Face when the user taps Download
+  # on the Model screen. The small bundled SmolLM2 does not need this.
+  http: ^1.2.0
+  crypto: ^3.0.0
 
 dev_dependencies:
   flutter_test:

@@ -61,15 +61,36 @@ class _Counter extends ChangeNotifier implements ValueListenable<int> {
 }
 
 /// Reads frame timings from the engine, the same source the real meter uses.
-class PreviewFrameMeter {
+class PreviewFrameMeter implements JankMonitor {
   PreviewFrameMeter({this.budgetMs = 16.7});
 
+  @override
   final double budgetMs;
   final FrameTimeBuffer buffer = FrameTimeBuffer();
   final _Counter _jank = _Counter();
+  final _Counter _rate = _Counter();
+  final _Counter _logVersion = _Counter();
+  final List<JankEntry> _log = <JankEntry>[];
+  final Stopwatch _clock = Stopwatch()..start();
+  static const Duration _rateWindow = Duration(seconds: 1);
 
   ValueListenable<List<double>> get frameTimes => buffer;
   ValueListenable<int> get jankCount => _jank;
+
+  @override
+  ValueListenable<int> get jankPerSecond => _rate;
+
+  @override
+  ValueListenable<int> get jankLogVersion => _logVersion;
+
+  @override
+  List<JankEntry> get jankLog => List<JankEntry>.unmodifiable(_log);
+
+  @override
+  void clearJankLog() {
+    _log.clear();
+    _logVersion.set(_logVersion.value + 1);
+  }
 
   bool _started = false;
 
@@ -83,16 +104,29 @@ class PreviewFrameMeter {
     var jank = _jank.value;
     for (final t in timings) {
       final ms = t.totalSpan.inMicroseconds / 1000;
-      if (ms > budgetMs) jank++;
+      if (ms > budgetMs) {
+        jank++;
+        _log.add(JankEntry(atMs: _clock.elapsedMilliseconds, durationMs: ms));
+      }
       buffer.push(ms);
     }
     _jank.set(jank);
+    final cutoff = _clock.elapsedMilliseconds - _rateWindow.inMilliseconds;
+    var n = 0;
+    for (var i = _log.length - 1; i >= 0; i--) {
+      if (_log[i].atMs < cutoff) break;
+      n++;
+    }
+    _rate.set(n);
+    _logVersion.set(_log.length);
   }
 
   void dispose() {
     if (_started) SchedulerBinding.instance.removeTimingsCallback(_onTimings);
     buffer.dispose();
     _jank.dispose();
+    _rate.dispose();
+    _logVersion.dispose();
   }
 }
 
@@ -547,6 +581,7 @@ class _PreviewServicesState extends State<PreviewServices> {
       generators: _generators,
       frameTimes: widget.frameTimes ?? _meter!.frameTimes,
       jankCount: widget.jankCount ?? _meter!.jankCount,
+      jank: _meter!,
       frames: clock == null
           ? previewFrames
           : () => previewFrames(interval: const Duration(milliseconds: 100)),

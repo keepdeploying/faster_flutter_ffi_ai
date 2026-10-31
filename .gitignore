@@ -1,7 +1,10 @@
 .DS_Store
 .idea/
 *.iml
-# Downloaded at setup time, too big for Git (see scripts/fetch-models.sh).
+# Model weights are never committed: GitHub refuses files over 100 MB, and
+# both models are pinned by URL and SHA-256 in scripts/fetch-models.sh.
+#   models/qwen2.5-0.5b-instruct-q4_k_m.gguf          491 MB, pushed to the phone
+#   app/assets/models/smollm2-135m-instruct-q4_k_m.gguf 105 MB, bundled into the APK
 *.gguf
 # Raw benchmark output pulled from a phone before it is curated into results/.
 results/raw/
@@ -10,4 +13,4 @@ results/raw/
 **/build/
 **/pubspec.lock
 packages/llm_bridge/third_party/
-models/
+/models/

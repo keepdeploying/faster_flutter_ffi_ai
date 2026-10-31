@@ -12,6 +12,7 @@ import 'package:faster_flutter/app_services.dart';
 import 'package:faster_flutter/bridges/bridge.dart';
 import 'package:faster_flutter/screens/preview_services.dart';
 import 'package:faster_flutter/theme/theme.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -279,6 +280,7 @@ class TestServices {
       ],
       frameTimes: pulse,
       jankCount: jank,
+      jank: _TestJank(jank),
       frames: () {
         final f = frames ?? previewFramesForTest();
         return Stream<Frame>.periodic(interval, (i) => f[i % f.length]);
@@ -303,6 +305,31 @@ class TestServices {
 List<Frame> previewFramesForTest() => [
   Frame(rgba: Uint8List(4 * 4 * 4), width: 4, height: 4),
 ];
+
+/// Minimal [JankMonitor] for the test harness. Rate mirrors the cumulative
+/// jank counter, log and version stay inert. Enough for widget tests that
+/// never read the log.
+class _TestJank implements JankMonitor {
+  _TestJank(this._cumulative);
+
+  final ValueListenable<int> _cumulative;
+
+  @override
+  ValueListenable<int> get jankPerSecond => _cumulative;
+
+  @override
+  ValueListenable<int> get jankLogVersion => _version;
+  final ValueNotifier<int> _version = ValueNotifier<int>(0);
+
+  @override
+  double get budgetMs => 16.7;
+
+  @override
+  List<JankEntry> get jankLog => const <JankEntry>[];
+
+  @override
+  void clearJankLog() {}
+}
 
 /// Pumps a few real-time moments so async image decoding can finish, then one
 /// frame to draw the result.

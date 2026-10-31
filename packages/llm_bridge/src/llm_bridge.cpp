@@ -5,12 +5,16 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "llama.h"
@@ -101,6 +105,59 @@ namespace {
 // Stream ids are unique across all models, so one Dart-side callback can route
 // events from any number of models by id alone.
 std::atomic<int64_t> g_next_stream{1};
+
+// The pull sink for one stream: a bounded-only-by-memory queue of token
+// strings plus a sentinel that signals end of generation. llb_pull_next_token
+// waits on `cv` until something is available, pops the oldest entry, and
+// returns a pointer that stays alive until the next pull on the same stream.
+struct PullSink {
+  std::mutex mu;
+  std::condition_variable cv;
+  std::deque<std::string> tokens;
+  bool finished = false;
+  // Storage for the C string handed back to the caller on the last pull.
+  // Kept alive until the next pull replaces it.
+  std::string last_returned;
+};
+
+// Every active pull stream has an entry here. `llb_prompt_pull` inserts;
+// `llb_pull_next_token` erases once it has returned the terminating NULL.
+std::mutex g_pull_mu;
+std::unordered_map<int64_t, std::shared_ptr<PullSink>> g_pull_sinks;
+
+std::shared_ptr<PullSink> find_pull_sink(int64_t stream_id) {
+  std::lock_guard<std::mutex> lock(g_pull_mu);
+  auto it = g_pull_sinks.find(stream_id);
+  return it == g_pull_sinks.end() ? nullptr : it->second;
+}
+
+void erase_pull_sink(int64_t stream_id) {
+  std::lock_guard<std::mutex> lock(g_pull_mu);
+  g_pull_sinks.erase(stream_id);
+}
+
+// Callback installed by llb_prompt_pull. Pushes TOKEN strings into the sink
+// and marks the sink finished on DONE or ERROR. The callback owns the heap
+// copy that run_generation allocated; it is freed here because no Dart side
+// will claim it.
+void pull_sink_callback(int64_t stream_id, int32_t event, char* data,
+                        int32_t /*len*/) {
+  auto sink = find_pull_sink(stream_id);
+  if (sink == nullptr) {
+    if (data != nullptr) std::free(data);
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> lock(sink->mu);
+    if (event == LLB_EVENT_TOKEN && data != nullptr) {
+      sink->tokens.emplace_back(data);
+    } else {
+      sink->finished = true;
+    }
+  }
+  sink->cv.notify_all();
+  if (data != nullptr) std::free(data);
+}
 
 bool abort_callback(void* user_data) {
   return static_cast<llb_model*>(user_data)->cancel_flag.load();
@@ -385,4 +442,135 @@ LLB_EXPORT void llb_last_stats(llb_model* m, llb_stats* out) {
 
 LLB_EXPORT void llb_free_string(char* s) { std::free(s); }
 
+// Wraps `user_prompt` with the model's chat template as a single-turn user
+// message, so the channel-side pull path hands run_generation a prompt the
+// instruct model expects. On any template failure the raw prompt is returned
+// unchanged, which is what base (non-instruct) models want anyway.
+static std::string wrap_user_prompt(llb_model* m, const char* user_prompt) {
+  const char* tmpl = llama_model_chat_template(m->model, nullptr);
+  llama_chat_message msg{"user", user_prompt};
+  const int32_t needed = llama_chat_apply_template(
+      tmpl, &msg, 1, /*add_ass=*/true, nullptr, 0);
+  if (needed <= 0) return std::string(user_prompt);
+  std::vector<char> buf(static_cast<size_t>(needed) + 1);
+  const int32_t got = llama_chat_apply_template(
+      tmpl, &msg, 1, true, buf.data(), static_cast<int32_t>(buf.size()));
+  if (got <= 0) return std::string(user_prompt);
+  return std::string(buf.data(), static_cast<size_t>(got));
+}
+
+LLB_EXPORT int64_t llb_prompt_pull(llb_model* m, const char* prompt,
+                                   int32_t max_tokens, float temperature,
+                                   uint32_t seed) {
+  if (m == nullptr || prompt == nullptr) return -2;
+  if (m->running.load()) return -1;
+  if (m->worker.joinable()) m->worker.join();
+
+  const int64_t stream = g_next_stream.fetch_add(1);
+  auto sink = std::make_shared<PullSink>();
+  {
+    std::lock_guard<std::mutex> lock(g_pull_mu);
+    g_pull_sinks.emplace(stream, sink);
+  }
+  m->current_stream.store(stream);
+  m->cancel_flag.store(false);
+  g_cancelling.store(false);
+  m->running.store(true);
+  // Instruct models (SmolLM2, Qwen2.5) refuse to generate against a raw user
+  // string and emit EOS on the first step. The FFI path pre-formats on the
+  // Dart side; the channel path has no equivalent, so we do it here.
+  m->worker = std::thread(run_generation, m, stream,
+                          wrap_user_prompt(m, prompt),
+                          max_tokens, temperature, seed, pull_sink_callback);
+  return stream;
+}
+
+LLB_EXPORT const char* llb_pull_next_token(int64_t stream_id) {
+  auto sink = find_pull_sink(stream_id);
+  if (sink == nullptr) return nullptr;
+  std::unique_lock<std::mutex> lock(sink->mu);
+  sink->cv.wait(lock,
+                [&] { return !sink->tokens.empty() || sink->finished; });
+  if (!sink->tokens.empty()) {
+    sink->last_returned = std::move(sink->tokens.front());
+    sink->tokens.pop_front();
+    return sink->last_returned.c_str();
+  }
+  // Finished and no more tokens: tell the caller and drop the sink.
+  lock.unlock();
+  erase_pull_sink(stream_id);
+  return nullptr;
+}
+
 }  // extern "C"
+
+// JNI shims for the Kotlin side of channel_bridge. The symbol names follow the
+// JNI mangling for top-level externs in LlamaChannel.kt (file facade class
+// `LlamaChannelKt`). Only compiled on Android; iOS reaches the same C ABI
+// through dlsym.
+#if defined(__ANDROID__)
+
+#include <jni.h>
+
+namespace {
+
+jstring to_jstring_utf8(JNIEnv* env, const char* s) {
+  return s == nullptr ? nullptr : env->NewStringUTF(s);
+}
+
+}  // namespace
+
+extern "C" {
+
+JNIEXPORT jlong JNICALL
+Java_com_keepdeploying_channel_1bridge_LlamaChannelKt_nativeLoad(
+    JNIEnv* env, jclass /*clazz*/, jstring jpath, jint context_size,
+    jint threads, jbyteArray err_buf, jint err_buf_len) {
+  const char* path = env->GetStringUTFChars(jpath, nullptr);
+  const int32_t cap = err_buf == nullptr ? 0
+                                         : std::min<int32_t>(err_buf_len,
+                                                             env->GetArrayLength(err_buf));
+  std::vector<char> scratch(static_cast<size_t>(cap > 0 ? cap : 1), 0);
+  llb_model* model = llb_load(path, context_size, threads,
+                              cap > 0 ? scratch.data() : nullptr, cap);
+  env->ReleaseStringUTFChars(jpath, path);
+  if (err_buf != nullptr && cap > 0) {
+    env->SetByteArrayRegion(err_buf, 0, cap,
+                            reinterpret_cast<const jbyte*>(scratch.data()));
+  }
+  return reinterpret_cast<jlong>(model);
+}
+
+JNIEXPORT void JNICALL
+Java_com_keepdeploying_channel_1bridge_LlamaChannelKt_nativeFreeModel(
+    JNIEnv* /*env*/, jclass /*clazz*/, jlong handle) {
+  llb_unload(reinterpret_cast<llb_model*>(handle));
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_keepdeploying_channel_1bridge_LlamaChannelKt_nativePromptPull(
+    JNIEnv* env, jclass /*clazz*/, jlong handle, jstring jprompt,
+    jint max_tokens, jfloat temperature, jlong seed) {
+  const char* prompt = env->GetStringUTFChars(jprompt, nullptr);
+  const int64_t stream = llb_prompt_pull(
+      reinterpret_cast<llb_model*>(handle), prompt, max_tokens, temperature,
+      static_cast<uint32_t>(seed));
+  env->ReleaseStringUTFChars(jprompt, prompt);
+  return stream;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_keepdeploying_channel_1bridge_LlamaChannelKt_nativePullNextToken(
+    JNIEnv* env, jclass /*clazz*/, jlong stream_id) {
+  return to_jstring_utf8(env, llb_pull_next_token(stream_id));
+}
+
+JNIEXPORT void JNICALL
+Java_com_keepdeploying_channel_1bridge_LlamaChannelKt_nativeCancel(
+    JNIEnv* /*env*/, jclass /*clazz*/, jlong handle, jlong stream_id) {
+  llb_cancel(reinterpret_cast<llb_model*>(handle), stream_id);
+}
+
+}  // extern "C"
+
+#endif  // __ANDROID__

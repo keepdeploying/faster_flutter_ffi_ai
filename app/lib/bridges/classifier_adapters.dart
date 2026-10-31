@@ -378,23 +378,27 @@ void _ffiWorker(List<Object?> args) {
 }
 
 /// A background isolate that sends channel calls, for [ExecutionSite.isolate].
+///
+/// The [Isolate] handle returned by `Isolate.spawn` is intentionally not kept:
+/// on [close] we never `.kill()` it, because a Kotlin reply may still be
+/// arriving at this isolate's response port and killing it mid-flight aborts
+/// the engine. The worker shuts down by itself after its inbox closes.
 class _ChannelIsolate {
-  _ChannelIsolate._(this._isolate, this._send, this._replies);
+  _ChannelIsolate._(this._send, this._replies);
 
-  final Isolate _isolate;
   final SendPort _send;
   final StreamQueue _replies;
 
   static Future<_ChannelIsolate> spawn() async {
     final port = ReceivePort();
     final token = RootIsolateToken.instance!;
-    final isolate = await Isolate.spawn(_channelWorker, [
+    await Isolate.spawn(_channelWorker, [
       port.sendPort,
       token,
     ], debugName: 'channel-caller');
     final replies = StreamQueue(port);
     final send = await replies.next as SendPort;
-    return _ChannelIsolate._(isolate, send, replies);
+    return _ChannelIsolate._(send, replies);
   }
 
   Future<_Reply> classify(Frame frame) async {
@@ -414,7 +418,11 @@ class _ChannelIsolate {
   void close() {
     _send.send(null);
     _replies.close();
-    _isolate.kill(priority: Isolate.beforeNextEvent);
+    // Do NOT kill the isolate. A Kotlin reply to the inflight channel.classify
+    // may still be arriving at this isolate's response port; killing now frees
+    // that port, and Flutter's engine FML_CHECK(did_send) aborts the process.
+    // The worker exits on its own after its inbox closes and the last reply
+    // (if any) has landed.
   }
 }
 
@@ -452,6 +460,7 @@ void _channelWorker(List<Object?> args) {
 class StreamQueue {
   StreamQueue(Stream<Object?> stream) {
     _sub = stream.listen((event) {
+      if (_closed) return;
       if (_waiting.isNotEmpty) {
         _waiting.removeAt(0).complete(event);
       } else {
@@ -463,13 +472,28 @@ class StreamQueue {
   late final StreamSubscription<Object?> _sub;
   final List<Object?> _buffer = [];
   final List<Completer<Object?>> _waiting = [];
+  bool _closed = false;
 
   Future<Object?> get next {
+    if (_closed) {
+      return Future.error(StateError('StreamQueue is closed'));
+    }
     if (_buffer.isNotEmpty) return Future.value(_buffer.removeAt(0));
     final c = Completer<Object?>();
     _waiting.add(c);
     return c.future;
   }
 
-  void close() => _sub.cancel();
+  /// Cancels the subscription and completes any pending [next] with an error.
+  /// Without this, a caller awaiting a reply when the queue is closed hangs
+  /// forever (its Completer is never completed), which froze the Classify
+  /// screen's hero number when the user switched bridge or site mid-flight.
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    _sub.cancel();
+    while (_waiting.isNotEmpty) {
+      _waiting.removeAt(0).completeError(StateError('StreamQueue closed'));
+    }
+  }
 }

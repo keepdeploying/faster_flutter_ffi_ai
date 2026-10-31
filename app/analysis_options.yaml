@@ -1,6 +1,6 @@
 # The exclude list is the one the Flutter tool writes itself when platform
 # folders exist. Committing it in full stops `flutter pub get` from editing
-# this file on attendees' machines, which would block `git checkout step-NN`.
+# this file after a fresh clone, so `git status` stays clean.
 analyzer:
   exclude:
     - build/**
