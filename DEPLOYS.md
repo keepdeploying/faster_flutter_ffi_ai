@@ -6,5 +6,6 @@ The QR code in the README ([docs/apk-qr.png](docs/apk-qr.png)) and on the "Try i
 https://github.com/keepdeploying/faster_flutter_ffi_ai/releases/latest/download/faster-flutter-ffi-ai.apk,
 which always serves the newest release, so it never needs to change.
 
-| Date | What | Target | URL or tag | Commit |
-| ---- | ---- | ------ | ---------- | ------ |
+| Date       | What               | Target          | URL or tag                                                                 | Commit    |
+| ---------- | ------------------ | --------------- | -------------------------------------------------------------------------- | --------- |
+| 2026-10-31 | Android APK v0.1.0 | GitHub Releases | https://github.com/keepdeploying/faster_flutter_ffi_ai/releases/tag/v0.1.0 | `b280498` |
