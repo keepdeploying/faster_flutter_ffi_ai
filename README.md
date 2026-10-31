@@ -81,7 +81,7 @@ scripts/bench-android.sh <device-id>
 Each script does the same four things:
 
 1. Checks that a physical phone is connected. Emulators and simulators are refused.
-2. Runs `flutter drive --profile --driver=test_driver/perf_driver.dart --target=integration_test/bench_test.dart -d <id>`. It passes `--dart-define=FLUTTER_VERSION=<your version>`, and `QUICK=true` with `--quick`.
+2. Runs `flutter drive --profile --driver=test_driver/perf_driver.dart --target=integration_test/bench_test.dart -d <id>`. It passes `--dart-define=FFB_FLUTTER_VERSION=<your version>`, and `QUICK=true` with `--quick`.
 3. Checks that a new file landed in `results/raw/`.
 4. Makes the report from it: `results/<name>.md` with the tables, and `results/<name>/` with four SVG charts (`round_trip`, `classify_split`, `jank`, `speedup`) at 1600 x 900, ready for a 16:9 slide.
 

@@ -10,11 +10,12 @@ import 'package:flutter/foundation.dart';
 import 'stats.dart';
 
 /// The Flutter version the numbers were taken with. The bench scripts can pass
-/// `--dart-define=FLUTTER_VERSION=...`; the default is the version this repo is
-/// checked with (see .fvmrc).
+/// `--dart-define=FFB_FLUTTER_VERSION=...`; the default is the version this repo
+/// is checked with (see .fvmrc). The name is `FFB_` prefixed because the plain
+/// `FLUTTER_VERSION` is reserved by the Flutter framework.
 const String kFlutterVersion = String.fromEnvironment(
-  'FLUTTER_VERSION',
-  defaultValue: '3.47.6',
+  'FFB_FLUTTER_VERSION',
+  defaultValue: '3.47.7',
 );
 
 /// The device the numbers were taken on.

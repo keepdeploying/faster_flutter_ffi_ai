@@ -1,4 +1,4 @@
-group = "com.obumnwabude.channel_bridge"
+group = "com.keepdeploying.channel_bridge"
 version = "1.0-SNAPSHOT"
 
 buildscript {
@@ -26,7 +26,7 @@ plugins {
 }
 
 android {
-    namespace = "com.obumnwabude.channel_bridge"
+    namespace = "com.keepdeploying.channel_bridge"
 
     compileSdk = 36
 

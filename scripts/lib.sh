@@ -52,8 +52,11 @@ pick_flutter() {
 }
 
 # The version number `flutter --version` prints, for example 3.47.6.
+# Its output is shown, not hidden: the first run of a new Flutter (or fvm asking
+# to install the pinned version) can take minutes or wait for an answer.
 flutter_version() {
-  "${FLUTTER_CMD[@]}" --version 2>/dev/null |
+  printf '  running %s --version (the first run can download files)...\n' "${FLUTTER_CMD[*]}" >&2
+  "${FLUTTER_CMD[@]}" --version 2>&1 | tee /dev/stderr |
     sed -n 's/^Flutter \([0-9][0-9A-Za-z.+-]*\).*/\1/p' | head -1
 }
 
@@ -186,7 +189,7 @@ detect_app_id() {
       [ -n "$id" ] && break
     fi
   done
-  echo "${APP_ID:-${id:-com.obumnwabude.faster_flutter}}"
+  echo "${APP_ID:-${id:-com.keepdeploying.faster_flutter}}"
 }
 
 # The model file name, read from fetch-models.sh so it is written down once.
@@ -237,7 +240,7 @@ run_bench() {
   local stamp log define_args=() status
   stamp="$(mktemp "${TMPDIR:-/tmp}/ffb-stamp.XXXXXX")"
   log="${RAW_DIR}/bench-${platform}-$(date +%Y%m%d-%H%M%S).log"
-  define_args=("--dart-define=FLUTTER_VERSION=${version}")
+  define_args=("--dart-define=FFB_FLUTTER_VERSION=${version}")
   if [ "$quick" -eq 1 ]; then define_args+=("--dart-define=QUICK=true"); fi
 
   step "Running the benchmark on ${DEVICE_NAME}"

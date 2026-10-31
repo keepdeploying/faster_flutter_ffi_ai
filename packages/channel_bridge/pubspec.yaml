@@ -23,7 +23,7 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.obumnwabude.channel_bridge
+        package: com.keepdeploying.channel_bridge
         pluginClass: ChannelBridgePlugin
       ios:
         pluginClass: ChannelBridgePlugin

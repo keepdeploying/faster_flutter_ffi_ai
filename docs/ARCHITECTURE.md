@@ -138,8 +138,9 @@ Native timings use the monotonic clock on each side (`System.nanoTime`,
 ```
 
 `device.abi` is `Abi.current().toString()` from `dart:ffi` (`android_arm64`,
-`ios_arm64`). `flutter` comes from `--dart-define=FLUTTER_VERSION=...`; the
-bench scripts pass the version they detect, and the default is 3.47.6. In a
+`ios_arm64`). `flutter` comes from `--dart-define=FFB_FLUTTER_VERSION=...` (the
+plain `FLUTTER_VERSION` is reserved by the framework); the bench scripts pass
+the version they detect, and the default is 3.47.6. In a
 `classify` suite the stats object is named `overhead`, not `bridge` (the name
 `bridge` already holds the bridge's own name): it is the time that is neither
 preprocessing nor inference, which is the bridge.

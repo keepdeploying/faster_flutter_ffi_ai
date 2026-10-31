@@ -33,7 +33,7 @@ detect_app_id() {
       [[ -n "$id" ]] && break
     fi
   done
-  echo "${id:-com.example.faster_flutter}"
+  echo "${id:-com.keepdeploying.faster_flutter}"
 }
 APP_ID="${APP_ID:-$(detect_app_id)}"
 DEST_DIR="${ROOT}/models"

@@ -186,15 +186,18 @@ fi
 
 # ---------------------------------------------------------------- 2. platform folders
 
-step "Platform folders (app/)"
+step "Platform folders (app/android, app/ios)"
 if [ -d "${APP_DIR}/android" ] && [ -d "${APP_DIR}/ios" ]; then
   ok "app/android and app/ios exist, so flutter create is skipped"
 else
+  say "  Running '${FLUTTER_CMD[*]} create' to generate the Android (Kotlin, Gradle) and"
+  say "  iOS (Swift, Xcode) folders. On a fresh machine Flutter also fetches the engine"
+  say "  artifacts for each platform (100 to 300 MB). Its own output follows below."
   had_widget_test=0
   [ -f "${APP_DIR}/test/widget_test.dart" ] && had_widget_test=1
   # flutter create never overwrites a file that exists, so lib/ and
   # pubspec.yaml stay as they are.
-  (cd "$APP_DIR" && "${FLUTTER_CMD[@]}" create --org com.obumnwabude \
+  (cd "$APP_DIR" && "${FLUTTER_CMD[@]}" create --org com.keepdeploying \
     --project-name faster_flutter --platforms=android,ios --no-pub .)
   # flutter create adds a counter-app smoke test when there is none. It would
   # not match this app, so remove it, and only when it is the one just made.
@@ -315,11 +318,20 @@ fi
 
 # ---------------------------------------------------------------- 4. packages and icons
 
-step "Packages"
+step "Dart and Flutter packages"
+say "  Resolving dependencies and downloading them with '${FLUTTER_CMD[*]} pub get' for app/."
+say "  Local path packages: ffi_bridge, channel_bridge, llm_bridge."
+say "  External packages: flutter_litert 3.9.4 (LiteRT over FFI), path_provider, share_plus,"
+say "  device_info_plus, material_symbols_icons, integration_test, flutter_launcher_icons."
+say "  Flutter prints each resolved package and version below."
 (cd "$APP_DIR" && "${FLUTTER_CMD[@]}" pub get)
+say ""
+say "  Getting packages for tool/ (the report generator: args, path, xml, test)."
 (cd "${ROOT}/tool" && "${DART_CMD[@]}" pub get)
 
 step "App icons"
+say "  Running flutter_launcher_icons to generate the Android adaptive icon and the iOS"
+say "  asset catalogue from assets/icon/ (reads flutter_launcher_icons.yaml)."
 (cd "$APP_DIR" && "${DART_CMD[@]}" run flutter_launcher_icons -f flutter_launcher_icons.yaml)
 
 # ---------------------------------------------------------------- 5. next steps
@@ -338,6 +350,12 @@ Next:
                          scripts/fetch-models.sh            (then Finder, iPhone)
   4. The benchmark:      scripts/bench-android.sh   or   scripts/bench-ios.sh
 
-The first build compiles llama.cpp and takes a few minutes. Later builds are
-fast. More in README.md and docs/LLM.md.
+The first 'flutter run' or 'scripts/bench-*.sh' triggers two long one-time steps:
+  * The llm_bridge build hook compiles llama.cpp (tag b11610) with CMake for your
+    target. The source is already vendored in packages/llm_bridge/third_party/, so
+    no download is needed, only compilation. A few minutes on first build; cached
+    after.
+  * Flutter engine artifacts for Android or iOS, if 'flutter create' above did not
+    already fetch them. Each shows its own progress.
+Later builds are fast. More in README.md and docs/LLM.md.
 MSG
